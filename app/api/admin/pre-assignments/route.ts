@@ -1,7 +1,13 @@
+import { requirePlatformAdmin } from "@/lib/access-control";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { NextResponse } from "next/server";
 
 export async function GET(req: Request) {
+  const auth = await requirePlatformAdmin(req);
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status");
 
@@ -12,6 +18,9 @@ export async function GET(req: Request) {
         id,
         match_score,
         status,
+        corporate_confirmed_at,
+        ngo_confirmed_at,
+        activated_at,
         created_at,
         opportunity:opportunities(
           id,
@@ -49,6 +58,9 @@ export async function GET(req: Request) {
         id: row.id,
         match_score: row.match_score,
         status: row.status,
+        corporate_confirmed_at: row.corporate_confirmed_at,
+        ngo_confirmed_at: row.ngo_confirmed_at,
+        activated_at: row.activated_at,
         created_at: row.created_at,
         opportunity_id: opp.id,
         opportunity_title: opp.title ?? "Corporate Project",

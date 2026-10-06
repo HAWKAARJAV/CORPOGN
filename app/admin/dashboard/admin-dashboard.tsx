@@ -9,6 +9,9 @@ import {
   ArrowUpRight, BarChart3, Medal, Star, Circle,
 } from "lucide-react";
 import { supabaseBrowser } from "@/lib/supabase-browser";
+import { AiAssistBadge } from "@/components/ai-assist-badge";
+import { DashboardCopilot } from "@/components/dashboard-copilot";
+import { AI_PRODUCT_COPY } from "@/lib/ai-insights";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -833,9 +836,9 @@ function CorporatesTab() {
       setLoading(false);
     });
     // Fetch corporates directly
-    fetch("/api/corporates")
+    fetch("/api/admin/corporates")
       .then((r) => r.ok ? r.json() : { corporates: [] })
-      .then((d) => setCorps(d.corporates ?? d ?? []))
+      .then((d) => setCorps(d.corporates ?? []))
       .catch(() => setCorps([]))
       .finally(() => setLoading(false));
   }, []);
@@ -920,6 +923,9 @@ interface PreAssignment {
   id: string;
   match_score: number;
   status: string;
+  corporate_confirmed_at?: string | null;
+  ngo_confirmed_at?: string | null;
+  activated_at?: string | null;
   created_at: string;
   opportunity_id: string;
   opportunity_title: string;
@@ -949,6 +955,7 @@ function MatchmakerTab() {
   const [suggestResult, setSuggestResult] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [overrideDraft, setOverrideDraft] = useState<{ ngoId: string; notes: string } | null>(null);
+  const [activateMsg, setActivateMsg] = useState<string | null>(null);
 
   async function authHeader() {
     const { data } = await supabaseBrowser.auth.getSession();
@@ -1072,6 +1079,29 @@ function MatchmakerTab() {
     }
   };
 
+  const handleActivate = async (preAssignmentId: string) => {
+    setActionLoading(`activate-${preAssignmentId}`);
+    setActivateMsg(null);
+    try {
+      const headers = { "Content-Type": "application/json", ...(await authHeader()) };
+      const res = await fetch(`/api/admin/pre-assignments/${preAssignmentId}/activate`, {
+        method: "POST",
+        headers,
+      });
+      const result = await res.json();
+      if (res.ok) {
+        setActivateMsg("Project workspace activated — corporate and NGO dashboards can now unlock full delivery modules.");
+        loadPre();
+      } else {
+        setActivateMsg(result.error ?? "Could not activate.");
+      }
+    } catch {
+      setActivateMsg("Network error while activating.");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
       {/* Column 1: Opportunities List */}
@@ -1121,7 +1151,11 @@ function MatchmakerTab() {
           <h3 className="text-sm font-semibold text-white/80 mb-4 flex items-center gap-2">
             <Activity className="w-4 h-4 text-emerald-400" />
             Platform Pre-Assignments
+            <AiAssistBadge label="AI scored" variant="dark" className="ml-2 normal-case" />
           </h3>
+          {activateMsg ? (
+            <p className="text-[11px] text-violet-300 mb-3 leading-relaxed">{activateMsg}</p>
+          ) : null}
           {loadingPre ? (
             <div className="space-y-3">
               {[...Array(3)].map((_, i) => (
@@ -1150,10 +1184,31 @@ function MatchmakerTab() {
                     </span>
                   </div>
                   <div className="text-[10px] text-white/30 mb-2 truncate">Project: {p.opportunity_title}</div>
-                  <div className="flex justify-between items-center text-[10px] text-white/40">
+                  <div className="flex justify-between items-center text-[10px] text-white/40 mb-2">
                     <span>Match Score: <span className="text-violet-400 font-bold">{p.match_score}%</span></span>
                     <span>{ago(p.created_at)}</span>
                   </div>
+                  <div className="flex flex-wrap gap-1.5 text-[9px] mb-2">
+                    <span className={p.corporate_confirmed_at ? "text-emerald-400" : "text-amber-400"}>
+                      Corp {p.corporate_confirmed_at ? "✓" : "pending"}
+                    </span>
+                    <span className={p.ngo_confirmed_at ? "text-emerald-400" : "text-amber-400"}>
+                      NGO {p.ngo_confirmed_at ? "✓" : "pending"}
+                    </span>
+                    {p.activated_at ? (
+                      <span className="text-emerald-400">Workspace live</span>
+                    ) : null}
+                  </div>
+                  {!p.activated_at && p.corporate_confirmed_at && p.ngo_confirmed_at ? (
+                    <button
+                      type="button"
+                      onClick={() => handleActivate(p.id)}
+                      disabled={actionLoading === `activate-${p.id}`}
+                      className="w-full rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 py-1.5 text-[10px] font-bold text-white"
+                    >
+                      {actionLoading === `activate-${p.id}` ? "Activating…" : "Activate shared workspace"}
+                    </button>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -1166,7 +1221,11 @@ function MatchmakerTab() {
         {selectedOpp ? (
           <div className="rounded-2xl border border-white/5 bg-white/3 p-5">
             <div className="border-b border-white/5 pb-4 mb-5">
-              <div className="text-xs text-violet-400 font-medium mb-1">Matchmaker Console</div>
+              <div className="flex flex-wrap items-center gap-2 mb-1">
+                <div className="text-xs text-violet-400 font-medium">Matchmaker Console</div>
+                <AiAssistBadge label="CorpoGN AI" variant="dark" />
+              </div>
+              <p className="text-[11px] text-white/45 mb-2 max-w-2xl leading-relaxed">{AI_PRODUCT_COPY.matchmaker}</p>
               <h3 className="text-lg font-bold text-white mb-2">{selectedOpp.title}</h3>
               <p className="text-sm text-white/55 mb-4 leading-relaxed">{selectedOpp.description}</p>
               <div className="flex flex-wrap gap-3 text-xs text-white/60">
@@ -1447,6 +1506,13 @@ export default function AdminDashboard() {
         {tab === "corporates" && <CorporatesTab />}
         {tab === "logs" && <LogsTab />}
       </div>
+
+      <DashboardCopilot
+        portal="admin"
+        orgName="CorpoGN Platform"
+        section={TABS.find((t) => t.id === tab)?.label ?? tab}
+        theme="dark"
+      />
     </div>
   );
 }

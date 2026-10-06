@@ -19,10 +19,9 @@
 import { test, expect, Page } from "@playwright/test";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const BASE_URL        = "http://localhost:3000";
-const SUPABASE_URL    = "https://dkvtotlgyqxikdqacecc.supabase.co";
-const SERVICE_ROLE    =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRrdnRvdGxneXF4aWtkcWFjZWNjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDY3OTA1OCwiZXhwIjoyMDk2MjU1MDU4fQ.3gX63nMCKpgKjTXwIt9LnatRdR4x0ZyqRa2a_wDW3Ao";
+const BASE_URL = "http://localhost:3000";
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 
 const CORP_PASS = "TestCorp@2026!";
 let CORP_EMAIL  = "";
@@ -47,6 +46,12 @@ async function supabasePatch(table: string, filter: string, body: object) {
 
 // ─── Create the test account once before all tests ───────────────────────────
 test.beforeAll(async ({ request }) => {
+  if (!SUPABASE_URL || !SERVICE_ROLE) {
+    throw new Error(
+      "Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY — load from .env.local for E2E.",
+    );
+  }
+
   const ts = Date.now();
   CORP_EMAIL = `corp+${ts}@testcorp.com`;
 

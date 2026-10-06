@@ -1,3 +1,4 @@
+import { requirePlatformAdmin } from "@/lib/access-control";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { NextResponse } from "next/server";
 
@@ -5,6 +6,11 @@ export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requirePlatformAdmin(req);
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   try {
     const resolvedParams = await params;
     const id = resolvedParams.id;

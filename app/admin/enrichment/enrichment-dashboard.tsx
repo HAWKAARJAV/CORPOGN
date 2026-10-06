@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { AiAssistBadge } from "@/components/ai-assist-badge";
+import { AI_PRODUCT_COPY } from "@/lib/ai-insights";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface EnrichmentSummary {
@@ -219,8 +221,11 @@ export default function EnrichmentDashboard() {
               <div className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />
               <span className="text-xs font-mono text-violet-400 uppercase tracking-widest">Admin Console</span>
             </div>
-            <h1 className="text-2xl lg:text-3xl font-semibold tracking-tight">NGO Enrichment Pipeline</h1>
-            <p className="text-slate-400 text-sm mt-1">Autonomous multi-source data enrichment for all NGOs</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl lg:text-3xl font-semibold tracking-tight">NGO Enrichment Pipeline</h1>
+              <AiAssistBadge label="Autonomous AI" variant="dark" className="normal-case" />
+            </div>
+            <p className="text-slate-400 text-sm mt-1 max-w-2xl">{AI_PRODUCT_COPY.enrichment}</p>
           </div>
           <div className="flex items-center gap-3">
             <button

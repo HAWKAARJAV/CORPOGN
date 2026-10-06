@@ -1,5 +1,19 @@
 import { defineConfig, devices } from "@playwright/test";
 import path from "path";
+import fs from "fs";
+
+const envLocal = path.join(__dirname, ".env.local");
+if (fs.existsSync(envLocal)) {
+  for (const line of fs.readFileSync(envLocal, "utf8").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq === -1) continue;
+    const key = trimmed.slice(0, eq);
+    const value = trimmed.slice(eq + 1).replace(/^["']|["']$/g, "");
+    if (!process.env[key]) process.env[key] = value;
+  }
+}
 
 const AUTH = (name: string) =>
   path.join(__dirname, `playwright/.auth/${name}.json`);

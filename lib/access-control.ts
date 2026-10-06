@@ -1,3 +1,5 @@
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export type AuthUser = {
@@ -61,11 +63,57 @@ export function tokenFrom(request: Request) {
 
 export async function getCaller(request: Request): Promise<AuthUser | null> {
   const token = tokenFrom(request);
-  if (!token) return null;
+  if (token) {
+    const { data, error } = await supabaseAdmin.auth.getUser(token);
+    if (!error && data.user) return data.user as AuthUser;
+  }
 
-  const { data, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !data.user) return null;
-  return data.user as AuthUser;
+  // Same-origin dashboard fetches often rely on the Supabase session cookie
+  // rather than an explicit Authorization header.
+  try {
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll();
+          },
+        },
+      },
+    );
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) return user as AuthUser;
+  } catch {
+    // cookies() unavailable outside a request context — ignore.
+  }
+
+  return null;
+}
+
+export type PlatformAdminAuth =
+  | { ok: true; user: AuthUser; context: OrgContext }
+  | { ok: false; status: number; error: string };
+
+export async function requirePlatformAdmin(request: Request): Promise<PlatformAdminAuth> {
+  const user = await getCaller(request);
+  if (!user) {
+    return { ok: false, status: 401, error: "Unauthorized." };
+  }
+
+  const context = await getOrgContext(user);
+  if (!context || context.accountType !== "admin") {
+    return {
+      ok: false,
+      status: 403,
+      error: "Only platform admins can access this endpoint.",
+    };
+  }
+
+  return { ok: true, user, context };
 }
 
 /**

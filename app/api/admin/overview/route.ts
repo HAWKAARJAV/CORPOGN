@@ -1,7 +1,13 @@
+import { requirePlatformAdmin } from "@/lib/access-control";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = await requirePlatformAdmin(request);
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   try {
     const [
       { count: ngoCount },

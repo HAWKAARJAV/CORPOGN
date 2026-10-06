@@ -1,4 +1,5 @@
 import { getCaller, getOrgContext } from "@/lib/access-control";
+import { AI_PRODUCT_COPY } from "@/lib/ai-insights";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 function textFromRegistration(data: unknown, key: string) {
@@ -67,5 +68,12 @@ export async function GET(request: Request) {
     beneficiaryTypes: ngo.beneficiary_types ?? [],
   }));
 
-  return Response.json({ ngos });
+  return Response.json({
+    ngos,
+    ai: {
+      ranking: "trust_focus_state",
+      summary: AI_PRODUCT_COPY.discovery,
+      model: "CorpoGN Trust + Focus Ranker",
+    },
+  });
 }
