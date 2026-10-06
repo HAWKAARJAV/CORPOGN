@@ -4110,10 +4110,9 @@ function ImpactReportingSection({
         <p className="text-sm font-semibold text-slate-700 mb-4">Submit Evidence</p>
         <div className="grid gap-3 sm:grid-cols-3">
           {items.map((item) => (
-            <>
+            <Fragment key={item.type}>
               {/* Hidden real file input */}
               <input
-                key={`input-${item.type}`}
                 ref={item.ref}
                 type="file"
                 accept={item.accept}
@@ -4125,7 +4124,6 @@ function ImpactReportingSection({
                 }}
               />
               <button
-                key={item.label}
                 data-testid={item.testId}
                 onClick={() => item.ref.current?.click()}
                 disabled={uploading !== null}
@@ -4140,7 +4138,7 @@ function ImpactReportingSection({
                 </p>
                 <p className="text-xs text-slate-400">{item.hint}</p>
               </button>
-            </>
+            </Fragment>
           ))}
         </div>
       </div>
