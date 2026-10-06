@@ -18,21 +18,20 @@ async function goToDashboard(page: Page) {
 
 // ─── SUITE 1: Sign In ─────────────────────────────────────────────────────────
 test.describe("NGO Sign In", () => {
-  test("renders 3-tab sign-in page", async ({ page }) => {
+  test("renders organization sign-in options", async ({ page }) => {
     await page.goto(`${BASE_URL}/signin`);
-    await expect(page.getByRole("button", { name: "Corporate"  })).toBeVisible();
-    await expect(page.getByRole("button", { name: "NGO Admin"  })).toBeVisible();
-    await expect(page.getByRole("button", { name: "NGO Member" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sign in as Corporate" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sign in as NGO" })).toBeVisible();
   });
 
   test("wrong tab shows account-type mismatch error", async ({ page }) => {
-    // Sign out first so we're not already authenticated
     await page.goto(`${BASE_URL}/signin`);
-    // Stay on Corporate tab but use NGO credentials
+    await page.getByRole("button", { name: "Sign in as Corporate" }).click();
+    await page.getByRole("button", { name: "Login as Firm / Admin" }).click();
     await page.getByLabel("Email address").fill(NGO_EMAIL);
     await page.getByLabel("Password").fill(NGO_PASS);
-    await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page.getByText(/not a corporate account/i)).toBeVisible({ timeout: 10_000 });
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(page.getByText(/account type mismatch/i)).toBeVisible({ timeout: 10_000 });
   });
 
   test("already authenticated → redirected to NGO dashboard", async ({ page }) => {
@@ -57,7 +56,7 @@ test.describe("Sidebar Navigation", () => {
       ["nav-compliance-vault",    "Compliance Vault"],
       ["nav-trust-score",         "Trust Score"],
       ["nav-ai-proposal",         "AI Proposal Reviewer"],
-      ["nav-role-assignment",     "Role Assignment"],
+      ["nav-team-management",     "Role Assignment"],
       ["nav-settings",            "Settings"],
     ];
     for (const [testId, heading] of navMap) {
@@ -174,7 +173,7 @@ test.describe("NGO Profile Edit", () => {
     await page.getByTestId("edit-profile-btn").click();
     await page.getByTestId("profile-name-input").fill("Green Earth Foundation Updated");
     await page.getByTestId("save-profile-btn").click();
-    await expect(page.getByText(/changes saved/i)).toBeVisible();
+    await expect(page.getByText(/profile updated successfully/i)).toBeVisible();
   });
 
   test("Cancel closes edit form", async ({ page }) => {
@@ -237,7 +236,7 @@ test.describe("AI Proposal Reviewer", () => {
 test.describe("Role Assignment", () => {
   test.beforeEach(async ({ page }) => {
     await goToDashboard(page);
-    await page.getByTestId("nav-role-assignment").click();
+    await page.getByTestId("nav-team-management").click();
     await expect(page.getByRole("heading", { name: "Role Assignment" })).toBeVisible();
   });
 

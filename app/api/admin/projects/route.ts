@@ -1,7 +1,13 @@
+import { requirePlatformAdmin } from "@/lib/access-control";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { NextResponse } from "next/server";
 
 export async function GET(req: Request) {
+  const auth = await requirePlatformAdmin(req);
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   const { searchParams } = new URL(req.url);
   const page = parseInt(searchParams.get("page") ?? "1", 10);
   const limit = parseInt(searchParams.get("limit") ?? "20", 10);
@@ -106,6 +112,11 @@ export async function GET(req: Request) {
  *  - reject: status -> "proposal" (sent back to the corporate).
  */
 export async function PATCH(req: Request) {
+  const auth = await requirePlatformAdmin(req);
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   const body = (await req.json().catch(() => null)) as
     | { id?: string; action?: "approve" | "reject" }
     | null;

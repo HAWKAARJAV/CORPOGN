@@ -1,15 +1,4 @@
-import { supabaseAdmin } from "@/lib/supabase-admin";
-
-async function getCaller(request: Request) {
-  const token = (request.headers.get("Authorization") ?? "")
-    .replace("Bearer ", "")
-    .trim();
-  if (!token) return null;
-
-  const { data, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !data.user) return null;
-  return data.user;
-}
+import { getCaller } from "@/lib/access-control";
 
 function localAnalyse(text: string): string {
   const lower = text.toLowerCase().trim();
@@ -72,19 +61,27 @@ ${beneficiary}
 💡 Tip: Add GEMINI_API_KEY or OPENROUTER_API_KEY to your .env.local file to enable advanced Gemini AI analysis.`;
 }
 
+function isTransientAnalysisError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const code = "code" in error ? String((error as { code?: string }).code) : "";
+  const message = error instanceof Error ? error.message : "";
+  return code === "ECONNRESET" || code === "ABORT_ERR" || message === "aborted";
+}
+
 export async function POST(request: Request) {
   const user = await getCaller(request);
   if (!user) {
     return Response.json({ error: "Unauthorized." }, { status: 401 });
   }
 
+  let trimmedText = "";
   try {
     const { text } = (await request.json()) as { text?: string };
     if (!text || !text.trim()) {
       return Response.json({ error: "Proposal text is required." }, { status: 400 });
     }
 
-    const trimmedText = text.trim();
+    trimmedText = text.trim();
     const openRouterKey = process.env.OPENROUTER_API_KEY;
     const geminiKey = process.env.GEMINI_API_KEY;
 
@@ -207,11 +204,12 @@ Only output the analysis starting with **AI Analysis Complete** and the checkmar
 
     // Default fallback
     return Response.json({ result: localAnalyse(trimmedText) });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    if (trimmedText && isTransientAnalysisError(error)) {
+      return Response.json({ result: localAnalyse(trimmedText) });
+    }
     console.error("Proposal analysis error:", error);
-    return Response.json(
-      { error: error?.message || "Internal server error during analysis." },
-      { status: 500 },
-    );
+    const message = error instanceof Error ? error.message : "Internal server error during analysis.";
+    return Response.json({ error: message }, { status: 500 });
   }
 }

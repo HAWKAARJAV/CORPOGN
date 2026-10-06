@@ -1,7 +1,13 @@
+import { requirePlatformAdmin } from "@/lib/access-control";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { NextResponse } from "next/server";
 
 export async function GET(req: Request) {
+  const auth = await requirePlatformAdmin(req);
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   const { searchParams } = new URL(req.url);
   const page = parseInt(searchParams.get("page") ?? "1", 10);
   const limit = parseInt(searchParams.get("limit") ?? "25", 10);

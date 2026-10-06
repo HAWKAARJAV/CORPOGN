@@ -6,8 +6,6 @@ import { FormEvent, useState } from "react";
 import { ArrowLeft, Loader2, ShieldCheck } from "lucide-react";
 import { supabaseBrowser } from "@/lib/supabase-browser";
 
-const DEMO_ADMIN = { email: "corpogntech@gmail.com", password: "corpogn12" };
-
 const inputClass =
   "h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-[#849b34] focus:ring-2 focus:ring-lime-100";
 
@@ -52,11 +50,6 @@ export default function AdminLoginPage() {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void signInAndRoute(email, password);
-  }
-
-  function fillDemoCredentials() {
-    setEmail(DEMO_ADMIN.email);
-    setPassword(DEMO_ADMIN.password);
   }
 
   return (
@@ -123,22 +116,9 @@ export default function AdminLoginPage() {
             </button>
           </form>
 
-          <div className="mt-6 rounded-md border border-dashed border-slate-300 bg-slate-50 p-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Testing phase — demo admin
-            </p>
-            <p className="mt-1 text-sm text-slate-700">
-              {DEMO_ADMIN.email} / {DEMO_ADMIN.password}
-            </p>
-            <button
-              type="button"
-              onClick={fillDemoCredentials}
-              disabled={isSubmitting}
-              className="mt-2 text-sm font-semibold text-[#849b34] underline-offset-2 hover:underline disabled:opacity-60"
-            >
-              Use demo credentials
-            </button>
-          </div>
+          <p className="mt-6 text-center text-xs text-slate-500">
+            Platform admin access is invite-only. Contact your CorpoGN operator if you need credentials.
+          </p>
         </div>
       </div>
     </main>

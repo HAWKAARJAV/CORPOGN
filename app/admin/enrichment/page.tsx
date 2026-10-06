@@ -1,4 +1,8 @@
 import { Suspense } from "react";
+import { cookies } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
+import { redirect } from "next/navigation";
+import { getAdminForUser } from "@/lib/access-control";
 import EnrichmentDashboard from "./enrichment-dashboard";
 
 export const metadata = {
@@ -6,7 +10,34 @@ export const metadata = {
   description: "Monitor and control the autonomous NGO data enrichment pipeline.",
 };
 
-export default function EnrichmentPage() {
+export default async function EnrichmentPage() {
+  const cookieStore = await cookies();
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+      },
+    },
+  );
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/admin");
+  }
+
+  const admin = await getAdminForUser(user);
+  if (!admin) {
+    redirect("/admin");
+  }
+
   return (
     <Suspense
       fallback={

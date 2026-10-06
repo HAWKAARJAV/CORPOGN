@@ -5552,7 +5552,7 @@ export default function NgoDashboard({
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-bold text-white">{ngo.ngo_name}</p>
-            <p className="text-xs text-emerald-400">{getRoleLabel(viewerRole)}</p>
+            <p className="text-xs text-emerald-400" data-testid="sidebar-role-label">{getRoleLabel(viewerRole)}</p>
           </div>
         </div>
 

@@ -44,8 +44,8 @@ test.describe("Finance Officer sidebar", () => {
   test("does NOT see nav-command-center", async ({ page }) => {
     await expect(page.getByTestId("nav-command-center")).not.toBeVisible();
   });
-  test("does NOT see nav-role-assignment", async ({ page }) => {
-    await expect(page.getByTestId("nav-role-assignment")).not.toBeVisible();
+  test("does NOT see nav-team-management", async ({ page }) => {
+    await expect(page.getByTestId("nav-team-management")).not.toBeVisible();
   });
   test("does NOT see nav-milestone-reporting", async ({ page }) => {
     await expect(page.getByTestId("nav-milestone-reporting")).not.toBeVisible();
@@ -77,8 +77,8 @@ test.describe("Compliance Officer sidebar", () => {
   test("does NOT see nav-command-center", async ({ page }) => {
     await expect(page.getByTestId("nav-command-center")).not.toBeVisible();
   });
-  test("does NOT see nav-role-assignment", async ({ page }) => {
-    await expect(page.getByTestId("nav-role-assignment")).not.toBeVisible();
+  test("does NOT see nav-team-management", async ({ page }) => {
+    await expect(page.getByTestId("nav-team-management")).not.toBeVisible();
   });
   test("does NOT see nav-fund-tracking", async ({ page }) => {
     await expect(page.getByTestId("nav-fund-tracking")).not.toBeVisible();
@@ -105,8 +105,8 @@ test.describe("Operations Manager sidebar", () => {
   test("does NOT see nav-command-center", async ({ page }) => {
     await expect(page.getByTestId("nav-command-center")).not.toBeVisible();
   });
-  test("does NOT see nav-role-assignment", async ({ page }) => {
-    await expect(page.getByTestId("nav-role-assignment")).not.toBeVisible();
+  test("does NOT see nav-team-management", async ({ page }) => {
+    await expect(page.getByTestId("nav-team-management")).not.toBeVisible();
   });
   test("does NOT see nav-fund-tracking", async ({ page }) => {
     await expect(page.getByTestId("nav-fund-tracking")).not.toBeVisible();
@@ -131,8 +131,8 @@ test.describe("Field Coordinator sidebar", () => {
   test("does NOT see nav-command-center", async ({ page }) => {
     await expect(page.getByTestId("nav-command-center")).not.toBeVisible();
   });
-  test("does NOT see nav-role-assignment", async ({ page }) => {
-    await expect(page.getByTestId("nav-role-assignment")).not.toBeVisible();
+  test("does NOT see nav-team-management", async ({ page }) => {
+    await expect(page.getByTestId("nav-team-management")).not.toBeVisible();
   });
   test("does NOT see nav-impact-reporting", async ({ page }) => {
     await expect(page.getByTestId("nav-impact-reporting")).not.toBeVisible();
@@ -150,8 +150,8 @@ test.describe("Reporting Executive sidebar", () => {
   test("does NOT see nav-command-center", async ({ page }) => {
     await expect(page.getByTestId("nav-command-center")).not.toBeVisible();
   });
-  test("does NOT see nav-role-assignment", async ({ page }) => {
-    await expect(page.getByTestId("nav-role-assignment")).not.toBeVisible();
+  test("does NOT see nav-team-management", async ({ page }) => {
+    await expect(page.getByTestId("nav-team-management")).not.toBeVisible();
   });
   test("does NOT see nav-fund-tracking", async ({ page }) => {
     await expect(page.getByTestId("nav-fund-tracking")).not.toBeVisible();
@@ -177,8 +177,8 @@ test.describe("Volunteer sidebar", () => {
   test("does NOT see nav-command-center", async ({ page }) => {
     await expect(page.getByTestId("nav-command-center")).not.toBeVisible();
   });
-  test("does NOT see nav-role-assignment", async ({ page }) => {
-    await expect(page.getByTestId("nav-role-assignment")).not.toBeVisible();
+  test("does NOT see nav-team-management", async ({ page }) => {
+    await expect(page.getByTestId("nav-team-management")).not.toBeVisible();
   });
   test("does NOT see nav-compliance-vault", async ({ page }) => {
     await expect(page.getByTestId("nav-compliance-vault")).not.toBeVisible();
@@ -397,7 +397,7 @@ test.describe("Finance Officer role label", () => {
   test.use({ storageState: AUTH("finance") });
   test("sidebar shows Finance Officer label", async ({ page }) => {
     await goDash(page);
-    await expect(page.getByText("Finance Officer")).toBeVisible();
+    await expect(page.getByTestId("sidebar-role-label")).toHaveText("Finance Officer");
   });
 });
 
@@ -405,7 +405,7 @@ test.describe("Compliance Officer role label", () => {
   test.use({ storageState: AUTH("compliance") });
   test("sidebar shows Compliance Officer label", async ({ page }) => {
     await goDash(page);
-    await expect(page.getByText("Compliance Officer")).toBeVisible();
+    await expect(page.getByTestId("sidebar-role-label")).toHaveText("Compliance Officer");
   });
 });
 
@@ -413,6 +413,6 @@ test.describe("Operations Manager role label", () => {
   test.use({ storageState: AUTH("ops") });
   test("sidebar shows Operations Manager label", async ({ page }) => {
     await goDash(page);
-    await expect(page.getByText("Operations Manager")).toBeVisible();
+    await expect(page.getByTestId("sidebar-role-label")).toHaveText("Operations Manager");
   });
 });

@@ -23,6 +23,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const context = await getOrgContext(user);
   if (!context) return Response.json({ error: "Unsupported account type." }, { status: 403 });
 
+  const mayView =
+    context.accountType === "admin" ||
+    context.accountType === "corporate" ||
+    context.accountType === "corporate_employee" ||
+    (context.orgType === "ngo" && context.orgId === id);
+
+  if (!mayView) {
+    return Response.json({ error: "Access denied." }, { status: 403 });
+  }
+
   const { data: ngo, error: ngoError } = await supabaseAdmin
     .from("ngos")
     .select("*")
