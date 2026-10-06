@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { ArrowLeft, Loader2, ShieldCheck } from "lucide-react";
 import { supabaseBrowser } from "@/lib/supabase-browser";
+import {
+  INVESTOR_DEMO_PASSWORD,
+  INVESTOR_DEMO_PLATFORM_ADMIN,
+} from "@/lib/investor-demo-credentials";
 
 const inputClass =
   "h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-[#849b34] focus:ring-2 focus:ring-lime-100";
@@ -116,8 +120,20 @@ export default function AdminLoginPage() {
             </button>
           </form>
 
-          <p className="mt-6 text-center text-xs text-slate-500">
-            Platform admin access is invite-only. Contact your CorpoGN operator if you need credentials.
+          <button
+            type="button"
+            disabled={isSubmitting}
+            onClick={() => void signInAndRoute(INVESTOR_DEMO_PLATFORM_ADMIN.email, INVESTOR_DEMO_PASSWORD)}
+            className="mt-4 w-full rounded-md border border-slate-200 bg-[#f7f9f4] px-3 py-2.5 text-left text-xs text-slate-600 transition hover:border-[#849b34] disabled:opacity-60"
+          >
+            <span className="font-semibold text-slate-800">Investor demo operator</span>
+            <span className="mt-0.5 block font-mono text-[10px] text-slate-500">
+              {INVESTOR_DEMO_PLATFORM_ADMIN.email}
+            </span>
+          </button>
+
+          <p className="mt-4 text-center text-xs text-slate-500">
+            Requires <code className="text-[10px]">npm run seed:demo</code> on the connected Supabase project.
           </p>
         </div>
       </div>

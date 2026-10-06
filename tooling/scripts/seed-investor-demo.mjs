@@ -28,6 +28,7 @@ const DEMO = {
   ngoName: "Social Education and Equality Foundation",
   ngoSlug: "social-education-and-equality-foundation",
   ngoEmail: "admin@see-foundation.demo",
+  platformAdminEmail: "platform.admin@corpogn.demo",
   projectTitle: "Digital Education & Equal Opportunity Initiative",
   opportunityId: "a9f8e7d6-c5b4-4321-9876-543210fedcba",
   preAssignmentId: "b8e7d6c5-a4b3-4210-8765-432109fedcba",
@@ -360,6 +361,21 @@ async function main() {
     corporate_slug: DEMO.corporateSlug,
   });
 
+  const platformAdminUserId = await ensureAuthUser(admin, DEMO.platformAdminEmail, password, {
+    account_type: "admin",
+    full_name: "CorpoGN Platform Admin",
+  });
+  const { error: adminUserErr } = await admin.from("admin_users").upsert(
+    {
+      auth_user_id: platformAdminUserId,
+      email: DEMO.platformAdminEmail,
+      full_name: "CorpoGN Platform Admin",
+      is_active: true,
+    },
+    { onConflict: "email" },
+  );
+  if (adminUserErr) throw new Error(`admin_users: ${adminUserErr.message}`);
+
   const ngoUserId = await ensureAuthUser(admin, DEMO.ngoEmail, password, {
     account_type: "ngo",
     full_name: "Dr. Meera Iyer",
@@ -626,6 +642,10 @@ Corporate : ${DEMO.corporateName}
 NGO       : ${DEMO.ngoName}
   Admin     ${DEMO.ngoEmail}
   Dashboard /ngo/${DEMO.ngoSlug}/dashboard
+
+Platform  : CorpoGN operator console
+  Admin     ${DEMO.platformAdminEmail}
+  Sign-in   /admin  →  /admin/dashboard
 
 Project   : ${DEMO.projectTitle}
   Budget ₹${(DEMO.projectBudgetInr / 100000).toFixed(2)}L | Released ₹${(DEMO.releasedInr / 100000).toFixed(2)}L | Utilized ₹${(DEMO.utilizedInr / 100000).toFixed(2)}L

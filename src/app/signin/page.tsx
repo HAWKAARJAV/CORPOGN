@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase-browser";
+import { INVESTOR_DEMO_PASSWORD } from "@/lib/investor-demo-credentials";
 import {
   ArrowLeft, Building2, Leaf, ChevronDown, ChevronUp, Zap,
   Star, Shield, Wallet, Wrench, Camera, BarChart3, Heart, Users, Briefcase,
@@ -114,9 +115,9 @@ type DemoAccount = {
 const DEMO_ACCOUNTS: DemoAccount[] = [
   {
     label: "Corporate Super Admin",
-    sublabel: "Demo Corporation",
-    email: "demo@corpdemo.com",
-    password: "CorpoGN@2026",
+    sublabel: "Sorting Tax Advisory",
+    email: "csr.admin@sortingtax.demo",
+    password: INVESTOR_DEMO_PASSWORD,
     org: "corporate",
     mode: "corporate_admin",
     icon: Building2,
@@ -125,9 +126,9 @@ const DEMO_ACCOUNTS: DemoAccount[] = [
   },
   {
     label: "NGO Super Admin",
-    sublabel: "Green Earth Foundation",
-    email: "admin@greenearthngo.in",
-    password: "GreenEarth@2026",
+    sublabel: "SEE Foundation",
+    email: "admin@see-foundation.demo",
+    password: INVESTOR_DEMO_PASSWORD,
     org: "ngo",
     mode: "ngo_admin",
     icon: Leaf,
@@ -140,23 +141,22 @@ const NGO_ROLE_CREDS: {
   label: string; sublabel: string; email: string; password: string;
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
-    { label: "Finance Officer", sublabel: "Funds & Expenses", icon: Wallet, email: "finance@greenearthngo.in", password: "Finance@2026" },
-    { label: "Compliance Officer", sublabel: "Docs & Verification", icon: Shield, email: "compliance@greenearthngo.in", password: "Comply@2026" },
-    { label: "Operations Manager", sublabel: "Projects & Milestones", icon: Wrench, email: "ops@greenearthngo.in", password: "Ops@2026" },
-    { label: "Field Coordinator", sublabel: "Field & Media", icon: Camera, email: "field@greenearthngo.in", password: "Field@2026" },
-    { label: "Reporting Executive", sublabel: "Analytics & Reports", icon: BarChart3, email: "reporter@greenearthngo.in", password: "Report@2026" },
-    { label: "Volunteer", sublabel: "Tasks & Events", icon: Heart, email: "volunteer@greenearthngo.in", password: "Volunteer@2026" },
+    { label: "Finance Officer", sublabel: "Funds & Expenses", icon: Wallet, email: "finance@see-foundation.demo", password: INVESTOR_DEMO_PASSWORD },
+    { label: "Compliance Officer", sublabel: "Docs & Verification", icon: Shield, email: "compliance@see-foundation.demo", password: INVESTOR_DEMO_PASSWORD },
+    { label: "Operations Manager", sublabel: "Projects & Milestones", icon: Wrench, email: "ops@see-foundation.demo", password: INVESTOR_DEMO_PASSWORD },
+    { label: "Field Coordinator", sublabel: "Field & Media", icon: Camera, email: "field@see-foundation.demo", password: INVESTOR_DEMO_PASSWORD },
+    { label: "Reporting Executive", sublabel: "Analytics & Reports", icon: BarChart3, email: "reports@see-foundation.demo", password: INVESTOR_DEMO_PASSWORD },
+    { label: "Volunteer", sublabel: "Tasks & Events", icon: Heart, email: "volunteer@see-foundation.demo", password: INVESTOR_DEMO_PASSWORD },
   ];
 
 const CORP_ROLE_CREDS: {
   label: string; sublabel: string; email: string; password: string;
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
-    { label: "CSR Manager", sublabel: "Campaigns & Approvals", icon: Briefcase, email: "ananya.sharma@corporate-giant.example", password: "Employee@2026" },
-    { label: "Finance Manager", sublabel: "Budget & Tracking", icon: Wallet, email: "rohan.mehta@corporate-giant.example", password: "Employee@2026" },
-    { label: "Compliance Officer", sublabel: "Audit & Verification", icon: Shield, email: "priya.nair@corporate-giant.example", password: "Employee@2026" },
-    { label: "NGO Manager", sublabel: "NGO Connections", icon: Users, email: "kabir.khan@corporate-giant.example", password: "Employee@2026" },
-    { label: "ESG Officer", sublabel: "ESG & Impact", icon: Leaf, email: "sara.iyer@corporate-giant.example", password: "Employee@2026" },
+    { label: "CSR Manager", sublabel: "Campaigns & Approvals", icon: Briefcase, email: "csr.manager@sortingtax.demo", password: INVESTOR_DEMO_PASSWORD },
+    { label: "Finance Manager", sublabel: "Budget & Tracking", icon: Wallet, email: "finance@sortingtax.demo", password: INVESTOR_DEMO_PASSWORD },
+    { label: "Compliance Officer", sublabel: "Audit & Verification", icon: Shield, email: "compliance@sortingtax.demo", password: INVESTOR_DEMO_PASSWORD },
+    { label: "Executive Viewer", sublabel: "Analytics & ESG", icon: Users, email: "executive@sortingtax.demo", password: INVESTOR_DEMO_PASSWORD },
   ];
 
 // ─── Demo Panel ───────────────────────────────────────────────────────────────
@@ -222,10 +222,10 @@ function DemoPanel({
       {open && (
         <div className="space-y-4 border-t border-slate-100 px-4 pb-4 pt-3">
 
-          {/* ── Admin accounts ── */}
+          {/* ── Flagship org admins (see seed:demo) ── */}
           <div>
             <p className="mb-2 text-[10px] font-bold uppercase tracking-normal text-[#849b34]">
-              Platform Admins — Shared project active
+              Investor demo — Sorting Tax ↔ SEE Foundation
             </p>
             <div className="grid gap-2 sm:grid-cols-2">
               {DEMO_ACCOUNTS.map((acc) => (
@@ -261,7 +261,7 @@ function DemoPanel({
               <div className="flex items-center gap-2">
                 <Star className="h-3.5 w-3.5 text-[#849b34]" />
                 <p className="text-[11px] font-bold uppercase tracking-normal text-[#849b34]">
-                  Corporate Role Members — 5 roles
+                  Corporate Role Members — 4 roles
                 </p>
               </div>
               {corpRoleOpen
@@ -328,7 +328,12 @@ function DemoPanel({
           </div>
 
           <p className="text-center text-[10px] text-slate-500">
-            All demo accounts share a live project: <span className="font-semibold">Rural Education Mission</span>
+            Shared project:{" "}
+            <span className="font-semibold">Digital Education &amp; Equal Opportunity Initiative</span>
+            {" · "}
+            <Link href="/admin" className="font-semibold text-[#6f842a] hover:underline">
+              Platform admin → /admin
+            </Link>
           </p>
         </div>
       )}
