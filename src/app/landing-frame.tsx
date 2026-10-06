@@ -6,7 +6,7 @@ type LandingFrameProps = {
 
 export function LandingFrame({
   hash = "",
-  src = "/corpogn-landing.html",
+  src = "/corpogn-landing.html?v=pre-restructure-2026",
   title = "Corpogn CSR Management Software and Consultancy",
 }: LandingFrameProps) {
   return (
