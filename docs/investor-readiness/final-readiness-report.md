@@ -181,10 +181,11 @@ See `docs/investor-readiness/demo-script.md`. Definition of done for demo: run `
 
 | Gate | Result |
 |------|--------|
-| `npm run build` | See commit / CI output |
-| `npm run lint` | Targeted fixes on touched dashboards; full-repo ESLint debt may remain |
-| `npm run test:e2e` | Run after deploy; fix spec drift if dashboards change |
-| Responsive (1024/768) | `min-w-0` + table `overflow-x-auto` on corporate/NGO main shells |
+| `npm run build` | **Pass** (Next.js 16.2.6, commit `2f57303`) |
+| `npm run lint` | **Pass** on new components; full-repo ESLint still ~115 issues (legacy dashboards/scripts) |
+| `npm run test:e2e` | **Not confirmed green** in this session (Playwright run exceeded local timeout; re-run in CI or with live Supabase + `seed:demo`) |
+| Responsive (1024/768) | **Partial** — corporate/NGO main shells use `min-w-0` / `overflow-x-auto` on portfolio tables |
+| Deploy | **Pushed** `main` → `origin` (HAWKAARJAV/CORPOGN-FINAL); Render auto-deploy expected for service `srv-d6ek9dngi27c73fd79lg` |
 
 ---
 
