@@ -114,8 +114,8 @@ type DemoAccount = {
 
 const DEMO_ACCOUNTS: DemoAccount[] = [
   {
-    label: "Corporate Super Admin",
-    sublabel: "Sorting Tax Advisory",
+    label: "Sorting Tax Advisory",
+    sublabel: "Corporate Super Admin",
     email: "csr.admin@sortingtax.demo",
     password: INVESTOR_DEMO_PASSWORD,
     org: "corporate",
@@ -125,8 +125,8 @@ const DEMO_ACCOUNTS: DemoAccount[] = [
     iconBg: "bg-[#eef5dc]",
   },
   {
-    label: "NGO Super Admin",
-    sublabel: "SEE Foundation",
+    label: "Social Education and Equality Foundation",
+    sublabel: "SEE Foundation · NGO Super Admin",
     email: "admin@see-foundation.demo",
     password: INVESTOR_DEMO_PASSWORD,
     org: "ngo",
@@ -225,7 +225,7 @@ function DemoPanel({
           {/* ── Flagship org admins (see seed:demo) ── */}
           <div>
             <p className="mb-2 text-[10px] font-bold uppercase tracking-normal text-[#849b34]">
-              Investor demo — Sorting Tax ↔ SEE Foundation
+              Investor demo — Sorting Tax Advisory ↔ SEE Foundation
             </p>
             <div className="grid gap-2 sm:grid-cols-2">
               {DEMO_ACCOUNTS.map((acc) => (
