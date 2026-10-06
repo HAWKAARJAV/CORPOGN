@@ -272,6 +272,17 @@ function mapCorporateEmployee(employee: CorporateEmployeeRecord): RoleAccess {
   };
 }
 
+function viewerDisplayNameFromSession(
+  email: string | undefined,
+  metadata: Record<string, unknown>,
+  fallback: string,
+): string {
+  if (typeof metadata.full_name === "string" && metadata.full_name.trim()) {
+    return metadata.full_name.trim();
+  }
+  return email?.split("@")[0]?.trim() || fallback;
+}
+
 export function CorporateDashboard({ slug }: { slug: string }) {
   const router = useRouter();
   const [corporate, setCorporate] = useState<Corporate | null>(null);
@@ -282,6 +293,10 @@ export function CorporateDashboard({ slug }: { slug: string }) {
   const [employees, setEmployees] = useState<RoleAccess[]>([]);
   const [viewerAllowedPages, setViewerAllowedPages] = useState<string[] | null>(null);
   const [viewerAccountType, setViewerAccountType] = useState("");
+  const [viewerProfile, setViewerProfile] = useState<{ name: string; roleLabel: string }>({
+    name: "Corporate",
+    roleLabel: "Corporate Admin",
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -370,6 +385,13 @@ export function CorporateDashboard({ slug }: { slug: string }) {
       const metadata = session.user.user_metadata ?? {};
       setViewerAccountType(accountType);
 
+      if (accountType === "corporate") {
+        setViewerProfile({
+          name: viewerDisplayNameFromSession(session.user.email, metadata, "Corporate Admin"),
+          roleLabel: "Corporate Admin",
+        });
+      }
+
       let employeeRecord: RoleAccess | null = null;
       let corporateQuery;
 
@@ -382,16 +404,17 @@ export function CorporateDashboard({ slug }: { slug: string }) {
 
         employeeRecord = {
           email: session.user.email ?? "",
-          name:
-            typeof metadata.full_name === "string"
-              ? metadata.full_name
-              : session.user.email?.split("@")[0] || "Employee",
+          name: viewerDisplayNameFromSession(session.user.email, metadata, "Employee"),
           position:
             typeof metadata.position === "string" ? metadata.position : "Employee",
           pages: metadataPages,
           isActive: true,
         };
 
+        setViewerProfile({
+          name: employeeRecord.name,
+          roleLabel: employeeRecord.position,
+        });
         setViewerAllowedPages(metadataPages);
         setEmployees([employeeRecord]);
         setActiveItem((current) =>
@@ -406,6 +429,10 @@ export function CorporateDashboard({ slug }: { slug: string }) {
 
         if (employeeData?.is_active) {
           employeeRecord = mapCorporateEmployee(employeeData as CorporateEmployeeRecord);
+          setViewerProfile({
+            name: employeeRecord.name,
+            roleLabel: employeeRecord.position,
+          });
           setViewerAllowedPages(employeeRecord.pages);
           setEmployees([employeeRecord]);
           setActiveItem((current) =>
@@ -1096,13 +1123,17 @@ export function CorporateDashboard({ slug }: { slug: string }) {
                   </span>
                 ) : null}
               </button>
-              <div className="hidden items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 md:flex">
-                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-600">
+              <div
+                className="hidden min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 md:flex"
+                data-testid="header-viewer-identity"
+              >
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-blue-600">
                   <Building2 className="h-3 w-3 text-white" />
                 </div>
-                <span className="text-sm font-medium text-slate-700">
-                  {corporate?.company_email.split("@")[0] || "Corporate"}
-                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-slate-700">{viewerProfile.name}</p>
+                  <p className="truncate text-[11px] text-slate-500">{viewerProfile.roleLabel}</p>
+                </div>
               </div>
             </div>
           </header>

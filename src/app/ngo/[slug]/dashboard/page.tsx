@@ -100,7 +100,12 @@ export default async function NgoDashboardPage({
     <NgoDashboard
       ngo={ngo}
       viewerRole={viewerRole}
-      viewerName={(user.user_metadata?.full_name as string) ?? (user.user_metadata?.ngo_name as string) ?? "Admin"}
+      viewerName={
+        (user.user_metadata?.full_name as string) ??
+        user.email?.split("@")[0] ??
+        (user.user_metadata?.ngo_name as string) ??
+        "Admin"
+      }
     />
   );
 }
