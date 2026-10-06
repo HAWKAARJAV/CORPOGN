@@ -19,7 +19,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./src/*"],
+      "@/scripts/*": ["./tooling/scripts/*"]
     }
   },
   "include": [

@@ -180,6 +180,16 @@
     linear-gradient(180deg, #d7ebfb 0%, #b9d8f2 38%, #07123a 38%, #07123a 100%);
   }
 
+  #heroBgCanvas {
+   position: absolute;
+   inset: 0;
+   width: 100%;
+   height: 100%;
+   display: block;
+   z-index: 0;
+   pointer-events: none;
+  }
+
   #hero-bg-shell::before {
    content: '';
    position: absolute;
@@ -211,8 +221,9 @@
    background:
     linear-gradient(118deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.06) 42%, rgba(7,18,58,0.08) 100%),
     linear-gradient(145deg, #d7ebfb 0%, #c5def4 36%, #a9cce9 66%, #8db8dd 100%);
-   padding: clamp(24px, 3vw, 48px) clamp(28px, 6vw, 96px) clamp(60px, 7vw, 100px);
+   padding: clamp(92px, 10vw, 120px) clamp(28px, 6vw, 96px) clamp(60px, 7vw, 100px);
    display: flex;
+   flex-direction: column;
    align-items: flex-start;
    position: relative;
    overflow: hidden;
@@ -286,6 +297,107 @@
    -webkit-background-clip: text;
    -webkit-text-fill-color: transparent;
    background-clip: text;
+  }
+
+  .hint-copy {
+   position: relative;
+   z-index: 2;
+   margin-top: 22px;
+   max-width: 560px;
+  }
+
+  .hint-lead {
+   margin: 0;
+   font-family: "Open Sans", sans-serif;
+   font-size: clamp(15px, 1.35vw, 18px);
+   line-height: 1.65;
+   color: #1d366e;
+  }
+
+  .hint-actions {
+   display: flex;
+   flex-wrap: wrap;
+   gap: 12px;
+   margin-top: 22px;
+  }
+
+  .hint-actions a {
+   display: inline-flex;
+   align-items: center;
+   gap: 8px;
+   padding: 11px 22px;
+   border-radius: 50px;
+   font-family: "Inter", "Open Sans", sans-serif;
+   font-size: 13px;
+   font-weight: 700;
+   text-decoration: none;
+   letter-spacing: 0.02em;
+  }
+
+  .hint-actions .primary {
+   background: #9ab728;
+   color: #0a1a4e;
+   box-shadow: 0 8px 22px rgba(154,183,40,0.28);
+  }
+
+  .hint-actions .primary:hover { background: #b2d130; color: #0a1a4e; }
+
+  .hint-actions .ghost {
+   background: rgba(255,255,255,0.55);
+   color: #0e3386;
+   border: 1px solid rgba(14,51,134,0.18);
+  }
+
+  .hint-actions .ghost:hover { background: #fff; color: #0e3386; }
+
+  .hero-pulse {
+   position: absolute;
+   inset: auto 0 0 0;
+   height: 42%;
+   pointer-events: none;
+   z-index: 1;
+   background:
+    radial-gradient(ellipse at 50% 118%, rgba(154,183,40,0.18), transparent 48%),
+    radial-gradient(ellipse at 50% 100%, rgba(120,170,255,0.22), transparent 58%);
+  }
+
+  .hero-float-grid {
+   position: relative;
+   z-index: 3;
+   display: grid;
+   grid-template-columns: repeat(3, minmax(0, 1fr));
+   gap: 14px;
+   margin: 18px clamp(28px, 9vw, 150px) 8px;
+  }
+
+  .hero-float-card {
+   padding: 18px 18px 16px;
+   border-radius: 16px;
+   background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+   border: 1px solid rgba(194,224,255,0.16);
+   box-shadow: 0 16px 40px rgba(2,8,30,0.18);
+   backdrop-filter: blur(10px);
+  }
+
+  .hero-float-card strong {
+   display: block;
+   font-family: "Jost", sans-serif;
+   font-size: 15px;
+   font-weight: 700;
+   color: #fff;
+   margin-bottom: 6px;
+  }
+
+  .hero-float-card span {
+   display: block;
+   font-family: "Open Sans", sans-serif;
+   font-size: 13px;
+   line-height: 1.5;
+   color: rgba(196,216,245,0.78);
+  }
+
+  @media (max-width: 791px) {
+   .hero-float-grid { grid-template-columns: 1fr; margin: 14px 14px 4px; }
   }
 
 
@@ -489,6 +601,13 @@
     <span class="kw">consultancy</span> that puts<br>
     impact at the frontier
    </h1>
+   <div class="hint-copy">
+    <p class="hint-lead">One workspace for corporates and NGOs to plan programmes, choose partners, track spend, and prove social return.</p>
+    <div class="hint-actions">
+     <a class="primary" href="/signup" target="_top">Get started</a>
+     <a class="ghost" href="/signin" target="_top">Sign in</a>
+    </div>
+   </div>
   </section>
 
   <!-- ② Scroll-expand image -->
@@ -497,7 +616,7 @@
     <img
      class="hero-expand-img"
      id="heroExpandImg"
-     src="/sroi-study.jpg"
+     src="/csr-impact-maximizing-social-impact.png"
      alt="CSR Social Return on Investment – children benefitting from CSR initiatives in India"
     />
     <div class="hero-expand-text">
@@ -513,8 +632,41 @@
    </div>
   </div>
 
-  
- </div>
+  <div id="hero-stats">
+   <div class="hstat">
+    <span class="hstat-num" data-target="500" data-suffix="+">0+</span>
+    <span class="hstat-label">NGO partners</span>
+   </div>
+   <div class="hstat">
+    <span class="hstat-num" data-target="12" data-suffix="">0</span>
+    <span class="hstat-label">Schedule VII mapped</span>
+   </div>
+   <div class="hstat">
+    <span class="hstat-num" data-target="100" data-suffix="%">0%</span>
+    <span class="hstat-label">Audit-ready trail</span>
+   </div>
+   <div class="hstat">
+    <span class="hstat-num" data-target="24" data-suffix="/7">0/7</span>
+    <span class="hstat-label">Live field visibility</span>
+   </div>
+  </div>
+  </div>
+
+  <div class="hero-pulse" aria-hidden="true"></div>
+  <div class="hero-float-grid">
+   <article class="hero-float-card">
+    <strong>Match with purpose</strong>
+    <span>Find NGOs by sector, geography, and trust signals instead of spreading CSR spend across unknown partners.</span>
+   </article>
+   <article class="hero-float-card">
+    <strong>See the work happen</strong>
+    <span>Field updates, utilisation certificates, and geo-tagged evidence land in one CSR command view.</span>
+   </article>
+   <article class="hero-float-card">
+    <strong>Report without scramble</strong>
+    <span>Turn programme data into board-ready impact, ESG, and compliance reporting in a few clicks.</span>
+   </article>
+  </div>
  </div>
 
  <script>
@@ -586,6 +738,57 @@
    });
   }, { threshold: 0.3 });
   statEls.forEach(function (el) { io.observe(el); });
+
+  /* ─── NAVY ATMOSPHERE CANVAS ─── */
+  var canvas = document.getElementById('heroBgCanvas');
+  var shell = document.getElementById('hero-bg-shell');
+  if (canvas && shell && canvas.getContext) {
+    var ctx = canvas.getContext('2d');
+    var dots = [];
+    function resizeCanvas() {
+      var w = shell.clientWidth;
+      var h = shell.clientHeight;
+      canvas.width = w;
+      canvas.height = h;
+      var count = Math.max(28, Math.floor(w / 42));
+      dots = [];
+      for (var i = 0; i < count; i++) {
+        dots.push({
+          x: Math.random() * w,
+          y: h * (0.42 + Math.random() * 0.52),
+          r: 0.6 + Math.random() * 1.8,
+          a: 0.12 + Math.random() * 0.35,
+          s: 0.08 + Math.random() * 0.22
+        });
+      }
+    }
+    var t = 0;
+    function drawCanvas() {
+      var w = canvas.width, h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+      var horizon = h * 0.92;
+      var g = ctx.createRadialGradient(w * 0.5, horizon, 20, w * 0.5, horizon, w * 0.62);
+      g.addColorStop(0, 'rgba(154,183,40,0.16)');
+      g.addColorStop(0.35, 'rgba(48,92,180,0.18)');
+      g.addColorStop(1, 'rgba(7,18,58,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.ellipse(w * 0.5, horizon + 40, w * 0.72, h * 0.18, 0, 0, Math.PI * 2);
+      ctx.fill();
+      t += 0.008;
+      dots.forEach(function (d, i) {
+        var tw = (Math.sin(t + i) + 1) * 0.5;
+        ctx.beginPath();
+        ctx.fillStyle = 'rgba(210,228,255,' + (d.a * (0.45 + tw * 0.55)) + ')';
+        ctx.arc(d.x, d.y + Math.sin(t * d.s + i) * 6, d.r, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      requestAnimationFrame(drawCanvas);
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+    drawCanvas();
+  }
 
  })();
  </script>

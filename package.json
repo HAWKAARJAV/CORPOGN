@@ -10,13 +10,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "seed:corporate-employees": "node scripts/seed-corporate-employees.mjs",
-    "ngo:import": "node scripts/ngo-enrichment/import-discovered.mjs",
-    "ngo:enrich": "node scripts/ngo-enrichment/enrich.mjs",
-    "ngo:enrich:dry": "node scripts/ngo-enrichment/enrich.mjs --dry-run",
-    "ngo:enrich:single": "node scripts/ngo-enrichment/enrich.mjs --ngo-id",
-    "ngo:enrich:retry": "node scripts/ngo-enrichment/enrich.mjs --retry-failed",
-    "ngo:enrich:batch": "node scripts/ngo-enrichment/enrich.mjs --batch"
+    "seed:corporate-employees": "node tooling/scripts/seed-corporate-employees.mjs",
+    "ngo:import": "node tooling/scripts/ngo-enrichment/import-discovered.mjs",
+    "ngo:enrich": "node tooling/scripts/ngo-enrichment/enrich.mjs",
+    "ngo:enrich:dry": "node tooling/scripts/ngo-enrichment/enrich.mjs --dry-run",
+    "ngo:enrich:single": "node tooling/scripts/ngo-enrichment/enrich.mjs --ngo-id",
+    "ngo:enrich:retry": "node tooling/scripts/ngo-enrichment/enrich.mjs --retry-failed",
+    "ngo:enrich:batch": "node tooling/scripts/ngo-enrichment/enrich.mjs --batch",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",

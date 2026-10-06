@@ -16,17 +16,17 @@ if (fs.existsSync(envLocal)) {
 }
 
 const AUTH = (name: string) =>
-  path.join(__dirname, `playwright/.auth/${name}.json`);
+  path.join(__dirname, `tooling/e2e/playwright/.auth/${name}.json`);
 
 export default defineConfig({
-  testDir: "./tests",
+  testDir: "./tooling/e2e/tests",
   fullyParallel: false,        // sequential — avoids Supabase auth rate limits
   retries: 1,
   timeout: 45_000,
   reporter: [["list"], ["html", { open: "never" }]],
 
   // Global setup runs ONCE before all tests — creates all auth state files
-  globalSetup: require.resolve("./playwright/global-setup.ts"),
+  globalSetup: require.resolve("./tooling/e2e/playwright/global-setup.ts"),
 
   use: {
     baseURL: "http://localhost:3000",

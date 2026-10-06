@@ -44,7 +44,7 @@ next-env.d.ts
 test-results/
 playwright-report/
 .playwright-mcp/
-playwright/.auth/
+tooling/e2e/playwright/.auth/
 
 # local reference / scratch files
 CSR Management Software*
