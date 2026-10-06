@@ -5,28 +5,7 @@ import {
   type NgoCandidate,
 } from "@/lib/project-connections";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { getNgoIdForUser } from "@/lib/access-control";
-
-type AuthUser = {
-  id: string;
-  email?: string;
-  user_metadata?: Record<string, unknown>;
-};
-
-function tokenFrom(request: Request) {
-  return (request.headers.get("Authorization") ?? "")
-    .replace("Bearer ", "")
-    .trim();
-}
-
-async function getCaller(request: Request): Promise<AuthUser | null> {
-  const token = tokenFrom(request);
-  if (!token) return null;
-
-  const { data, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !data.user) return null;
-  return data.user as AuthUser;
-}
+import { getCaller, getCorporateIdForUser, getNgoIdForUser, type AuthUser } from "@/lib/access-control";
 
 function isMissingConnectionTable(error?: { message?: string } | null) {
   return Boolean(
@@ -45,42 +24,16 @@ function jsonField(record: unknown, key: string) {
 }
 
 async function getCorporateForUser(user: AuthUser) {
-  const accountType = user.user_metadata?.account_type;
+  const corporateId = await getCorporateIdForUser(user);
+  if (!corporateId) return null;
 
-  if (accountType === "corporate") {
-    const { data, error } = await supabaseAdmin
-      .from("corporates")
-      .select("id, company_name")
-      .eq("auth_user_id", user.id)
-      .single();
-    if (error || !data) return null;
-    return data as { id: string; company_name: string };
-  }
-
-  if (accountType === "corporate_employee") {
-    const { data: employee } = await supabaseAdmin
-      .from("corporate_employees")
-      .select("corporate_id, is_active")
-      .eq("auth_user_id", user.id)
-      .single();
-
-    const corporateId =
-      employee?.is_active && employee.corporate_id
-        ? employee.corporate_id
-        : (user.user_metadata?.corporate_id as string | undefined);
-
-    if (!corporateId) return null;
-
-    const { data, error } = await supabaseAdmin
-      .from("corporates")
-      .select("id, company_name")
-      .eq("id", corporateId)
-      .single();
-    if (error || !data) return null;
-    return data as { id: string; company_name: string };
-  }
-
-  return null;
+  const { data, error } = await supabaseAdmin
+    .from("corporates")
+    .select("id, company_name")
+    .eq("id", corporateId)
+    .single();
+  if (error || !data) return null;
+  return data as { id: string; company_name: string };
 }
 
 async function getNgoForUser(user: AuthUser) {

@@ -1,12 +1,5 @@
+import { getCaller } from "@/lib/access-control";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-
-async function getCaller(request: Request) {
-  const token = (request.headers.get("Authorization") ?? "").replace("Bearer ", "").trim();
-  if (!token) return null;
-  const { data, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !data.user) return null;
-  return data.user;
-}
 
 /**
  * GET /api/opportunities

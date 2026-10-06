@@ -15,6 +15,10 @@ import {
 } from "lucide-react";
 import { getRoleLabel, NGO_ROLES, ROLE_SIDEBAR_ACCESS } from "@/lib/ngo";
 import type { NgoRole } from "@/lib/ngo";
+import { AiAssistBadge, AiInsightLine } from "@/components/ai-assist-badge";
+import { AiTaskStreamPanel } from "@/components/ai-task-stream-panel";
+import { DashboardCopilot } from "@/components/dashboard-copilot";
+import { AI_PRODUCT_COPY } from "@/lib/ai-insights";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1149,14 +1153,18 @@ function ResolvedComplianceSummary({ fields }: { fields: ResolvedComplianceField
 }
 
 function ComplianceVaultSection({
-  docs, docPaths, onDocUpload, ngoId, resolvedCompliance,
+  docs, docPaths, onDocUpload, ngoId, resolvedCompliance, ngoName, token, documentExcerpt,
 }: {
   docs: Record<string, string>;
   docPaths: Record<string, string>;
   onDocUpload: (docId: string, storagePath?: string) => void;
   ngoId: string;
   resolvedCompliance: ResolvedComplianceField[];
+  ngoName: string;
+  token: string;
+  documentExcerpt?: string;
 }) {
+  const [excerpt, setExcerpt] = useState(documentExcerpt ?? "");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [defaultDocType, setDefaultDocType] = useState<string | undefined>();
   const [toast, setToast] = useState("");
@@ -1226,6 +1234,46 @@ function ComplianceVaultSection({
       )}
 
       <ResolvedComplianceSummary fields={resolvedCompliance} />
+
+      <AiTaskStreamPanel
+        title="AI compliance summary"
+        description="LLM summarizes your vault status, resolved registration fields, and gaps — paste an excerpt from a PDF below for deeper analysis."
+        task="compliance_summary"
+        token={token}
+        portal="ngo"
+        section="Compliance Vault"
+        orgName={ngoName}
+        testId="ai-compliance-summary-btn"
+        payload={{
+          ngoId,
+          uploadedDocuments: DOC_TYPES.filter((d) => docs[d.id]).map((d) => ({
+            id: d.id,
+            label: d.label,
+            category: d.category,
+            status: docs[d.id],
+          })),
+          missingDocuments: DOC_TYPES.filter((d) => !docs[d.id]).map((d) => d.label),
+          resolvedFields: resolvedCompliance.map((f) => ({
+            field: f.field,
+            value: f.resolvedValue,
+            source: f.resolvedSource,
+            hasConflict: f.hasConflict,
+          })),
+          optionalExcerpt: excerpt.trim() || undefined,
+        }}
+        extraInstructions={excerpt.trim() ? undefined : "Focus on statutory gaps for Indian CSR due diligence."}
+      />
+      <div className={`${cardCls} p-4`}>
+        <p className="text-xs font-semibold text-slate-700 mb-2">Optional: paste text from a compliance PDF</p>
+        <textarea
+          data-testid="compliance-doc-excerpt"
+          rows={3}
+          value={excerpt}
+          onChange={(e) => setExcerpt(e.target.value)}
+          placeholder="Registration number, validity dates, auditor notes…"
+          className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-900 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+        />
+      </div>
 
       {categories.map((cat) => (
         <div key={cat}>
@@ -1395,7 +1443,10 @@ function AiProposalSection({ token }: { token: string }) {
 
   return (
     <div className="space-y-6">
-      <SectionHeader title="AI Proposal Reviewer" sub="Get instant AI feedback on your CSR proposal before submitting to corporates." />
+      <div className="mb-2">
+        <AiAssistBadge label="Groq / LLM" variant="emerald" />
+      </div>
+      <SectionHeader title="AI Proposal Reviewer" sub={AI_PRODUCT_COPY.proposalReview} />
       <div className={`${cardCls} p-6`}>
         <div className="flex items-center gap-3 mb-5">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-100">
@@ -1481,6 +1532,9 @@ interface Opportunity {
   min_trust_score?: number;
   created_at: string;
   corporate_name: string;
+  ai_fit_score?: number;
+  ai_fit_label?: string;
+  ai_insight?: string;
 }
 
 function getSdgInfo(focusArea: string) {
@@ -1817,7 +1871,16 @@ function OpportunitiesSection({
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
-        <SectionHeader title="Opportunities" sub="Browse open CSR funding programs and submit direct proposals." />
+        <div>
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <AiAssistBadge label="AI match scores" variant="emerald" />
+          </div>
+          <SectionHeader
+            title="Opportunities"
+            sub="Browse open CSR funding programs. CorpoGN AI scores each brief against your trust profile before you apply."
+          />
+          <p className="mt-1 max-w-2xl text-xs text-slate-500">{AI_PRODUCT_COPY.discovery}</p>
+        </div>
       </div>
 
       {toast && (
@@ -1896,6 +1959,16 @@ function OpportunitiesSection({
                   </div>
                   <h3 className="text-lg font-bold text-slate-900 tracking-tight">{opp.title}</h3>
                   <p className="text-xs font-semibold text-slate-400 mt-1">Funder: {opp.corporate_name}</p>
+                  {typeof opp.ai_fit_score === "number" ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-violet-50 px-2.5 py-0.5 text-[10px] font-bold text-violet-800">
+                        AI fit {opp.ai_fit_score}% · {opp.ai_fit_label ?? "Match"}
+                      </span>
+                    </div>
+                  ) : null}
+                  {opp.ai_insight ? (
+                    <AiInsightLine text={opp.ai_insight} className="mt-2 text-violet-600/90" />
+                  ) : null}
                   <p className="text-sm text-slate-600 mt-3 line-clamp-3">{opp.description}</p>
                 </div>
                 <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
@@ -3937,11 +4010,13 @@ function MilestoneReportingSection({
 // ─── Section: Impact Reporting ────────────────────────────────────────────────
 
 function ImpactReportingSection({
-  connection, token,
+  connection, token, ngoName,
 }: {
   connection?: ProjectConnection;
   token: string;
+  ngoName: string;
 }) {
+  const [impactNotes, setImpactNotes] = useState("");
   const photoRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLInputElement>(null);
   const pdfRef = useRef<HTMLInputElement>(null);
@@ -3987,6 +4062,39 @@ function ImpactReportingSection({
   return (
     <div className="space-y-6">
       <SectionHeader title="Impact Reporting" sub="Upload field evidence — photos, videos, and reports. Syncs to corporate review queue." />
+      <AiTaskStreamPanel
+        title="AI impact report draft"
+        description="Streams a board-ready narrative from your KPIs and field notes. Edit before sharing with corporate partners."
+        task="impact_report"
+        token={token}
+        portal="ngo"
+        section="Impact Reporting"
+        orgName={ngoName}
+        testId="ai-impact-report-btn"
+        buttonLabel="Draft impact report"
+        payload={{
+          projectName: connection?.project_name ?? "Active CSR project",
+          corporatePartner: connection?.corporate_name ?? "Corporate partner",
+          connectionStatus: connection?.status,
+          illustrativeKpis: {
+            beneficiariesReached: 1240,
+            communitiesServed: 8,
+            reportsSubmitted: 2,
+          },
+          fieldNotes: impactNotes.trim() || undefined,
+        }}
+      />
+      <div className={`${cardCls} p-4`}>
+        <p className="text-xs font-semibold text-slate-700 mb-2">Field notes for the AI draft</p>
+        <textarea
+          data-testid="impact-field-notes"
+          rows={4}
+          value={impactNotes}
+          onChange={(e) => setImpactNotes(e.target.value)}
+          placeholder="Outcomes this quarter, locations, beneficiary stories, data caveats…"
+          className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-900 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+        />
+      </div>
       <div className="grid gap-4 sm:grid-cols-3">
         <KpiCard label="Beneficiaries Reached" value="1,240" icon={Heart} color="rose" />
         <KpiCard label="Communities Served" value="8" icon={MapPin} color="emerald" />
@@ -4826,7 +4934,7 @@ function LegalDocumentsSection({
         title="Regulatory Document Vault"
         description="The NGO's real compliance document vault — the same data and uploads the Super Admin sees, not a separate mock list."
         badge={`${Object.keys(docs).length} of ${DOC_TYPES.length} uploaded`} />
-      <ComplianceVaultSection docs={docs} docPaths={docPaths} onDocUpload={onDocUpload} ngoId={ngo.id} resolvedCompliance={resolvedCompliance} />
+      <ComplianceVaultSection docs={docs} docPaths={docPaths} onDocUpload={onDocUpload} ngoId={ngo.id} resolvedCompliance={resolvedCompliance} ngoName={ngo.ngo_name} token={token} />
     </div>
   );
 }
@@ -5446,6 +5554,8 @@ export default function NgoDashboard({
           }))}
           ngoId={liveNgo.id}
           resolvedCompliance={resolvedCompliance}
+          ngoName={liveNgo.ngo_name}
+          token={token}
         />
       );
       case "trust-score": return <TrustScoreSection ngo={liveNgo} onNavigate={navigate} liveTrustScore={liveTrustScore} docs={sharedState.docs} />;
@@ -5472,7 +5582,7 @@ export default function NgoDashboard({
           }))}
         />
       );
-      case "impact-reporting": return <ImpactReportingSection connection={primaryActiveConnection} token={token} />;
+      case "impact-reporting": return <ImpactReportingSection connection={primaryActiveConnection} token={token} ngoName={liveNgo.ngo_name} />;
       case "utilization-cert": return <UtilizationCertSection connection={primaryActiveConnection} token={token} />;
       case "team-management":
       case "role-assignment": return <RoleAssignmentSection ngo={liveNgo} token={token} projectId={activeProjectId} />;
@@ -5638,6 +5748,11 @@ export default function NgoDashboard({
           {renderSection()}
         </main>
       </div>
+      <DashboardCopilot
+        portal="ngo"
+        orgName={liveNgo.ngo_name}
+        section={ALL_SIDEBAR_ITEMS.find((i) => i.id === activeSection)?.label ?? activeSection}
+      />
     </div>
   );
 }

@@ -1,5 +1,9 @@
 "use client";
 
+import { AiAssistBadge } from "@/components/ai-assist-badge";
+import { AiTaskStreamPanel } from "@/components/ai-task-stream-panel";
+import { DashboardCopilot } from "@/components/dashboard-copilot";
+import { AI_PRODUCT_COPY } from "@/lib/ai-insights";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState, useRef } from "react";
 import {
@@ -1717,6 +1721,13 @@ export function CorporateDashboard({ slug }: { slug: string }) {
           </div>
         </section>
       </main>
+
+      <DashboardCopilot
+        portal="corporate"
+        orgName={corporate?.company_name ?? slug}
+        section={activeItem}
+        theme="light"
+      />
 
       {activeComparisonProposal && activeComparisonOpp && (
         <NgoComparisonModal
@@ -3903,6 +3914,7 @@ function DiscoverNgosPage({ corporateSlug }: { corporateSlug: string }) {
   const [stateFilter, setStateFilter] = useState("");
   const [sortBy, setSortBy] = useState<"trust" | "name">("trust");
   const [errorMessage, setErrorMessage] = useState("");
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
 
   async function load(q?: string, state?: string) {
     setIsLoading(true);
@@ -3921,13 +3933,18 @@ function DiscoverNgosPage({ corporateSlug }: { corporateSlug: string }) {
       const res = await fetch(`/api/corporates/discover-ngos?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const result = (await res.json()) as { ngos?: DiscoverableNgo[]; error?: string };
+      const result = (await res.json()) as {
+        ngos?: DiscoverableNgo[];
+        error?: string;
+        ai?: { summary?: string };
+      };
       if (!res.ok) {
         setErrorMessage(result.error ?? "Could not load NGOs.");
         setIsLoading(false);
         return;
       }
       setNgos(result.ngos ?? []);
+      setAiSummary(result.ai?.summary ?? AI_PRODUCT_COPY.discovery);
     } catch {
       setErrorMessage("Could not load NGOs.");
     } finally {
@@ -3954,6 +3971,12 @@ function DiscoverNgosPage({ corporateSlug }: { corporateSlug: string }) {
         title="Search and vet verified NGO partners"
         text="Browse the full NGO directory, filter by state or focus, and open a complete profile — registration, financials, project history, and trust signals — before reaching out."
       />
+      <div className="flex flex-wrap items-center gap-2">
+        <AiAssistBadge label="AI-ranked directory" />
+        {aiSummary ? (
+          <p className="text-xs text-slate-600 max-w-3xl">{aiSummary}</p>
+        ) : null}
+      </div>
 
       <Card className="p-5">
         <form
@@ -4776,6 +4799,35 @@ function EsgImpactPage({
           </Card>
         ) : null}
 
+        <AiTaskStreamPanel
+          title="AI CSR impact report"
+          description="Generate a streaming board narrative from logged M&E metrics across your signed projects."
+          task="impact_report"
+          portal="corporate"
+          section="ESG & Impact"
+          testId="corporate-ai-impact-btn"
+          buttonLabel="Draft portfolio impact report"
+          payload={{
+            projects: projects.map((project) => ({
+              title: project.title,
+              focusArea: project.focusArea,
+              sdgTargets: project.sdgTargets,
+              targetBeneficiaries: project.targetBeneficiaries,
+              metrics: (metricsByProject.get(project.id) ?? []).map((m) => ({
+                name: m.metricName,
+                value: m.metricValue,
+                unit: m.unit,
+                period: m.period,
+              })),
+            })),
+            totals: {
+              projectCount: projects.length,
+              metricsLogged: metrics.length,
+              sdgCount: sdgSet.size,
+            },
+          }}
+        />
+
         <section className="mt-6 grid min-w-0 gap-5">
           {projects.map((project) => {
             const projectMetrics = metricsByProject.get(project.id) ?? [];
@@ -5234,6 +5286,33 @@ function AuditCompliancePage({
             )}
           </Card>
         </section>
+
+        <AiTaskStreamPanel
+          title="AI partner compliance brief"
+          description="Streaming summary across your partner NGOs — document completeness, open audits, and due-diligence priorities."
+          task="compliance_summary"
+          portal="corporate"
+          section="Audit & Compliance"
+          buttonLabel="Summarize compliance posture"
+          testId="corporate-ai-compliance-btn"
+          payload={{
+            openAudits: openAudits.map((a) => ({
+              type: a.auditType,
+              status: a.status,
+              project: a.projectTitle,
+              findings: a.findings,
+            })),
+            partners: partners.map((ngo) => ({
+              name: ngo.name,
+              trustScore: ngo.trustScore,
+              documentsOnFile: ngo.documentsOnFile,
+              documentsTotal: ngo.documentsTotal,
+              missing: ngo.documents.filter((d) => d.status === "missing" || d.status === "pending").map((d) => d.name),
+            })),
+            missingDocumentsCount: missingDocs,
+            documentCompletenessPct: totalDocs > 0 ? Math.round(((totalDocs - missingDocs) / totalDocs) * 100) : 0,
+          }}
+        />
 
         <Card className="mt-6">
           <SectionHeading icon={ShieldCheck} title="Compliance Checklist" text="Registration and statutory documents held on file for each partner NGO." />

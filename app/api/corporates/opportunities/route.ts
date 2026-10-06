@@ -1,56 +1,18 @@
+import { getCaller, getCorporateIdForUser, type AuthUser } from "@/lib/access-control";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { generateProjectTrustScores } from "@/lib/trust-score-engine";
 
-type AuthUser = {
-  id: string;
-  user_metadata?: Record<string, unknown>;
-};
-
-async function getCaller(request: Request) {
-  const token = (request.headers.get("Authorization") ?? "").replace("Bearer ", "").trim();
-  if (!token) return null;
-  const { data, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !data.user) return null;
-  return data.user;
-}
-
 async function getCorporateForUser(user: AuthUser) {
-  const accountType = user.user_metadata?.account_type;
+  const corporateId = await getCorporateIdForUser(user);
+  if (!corporateId) return null;
 
-  if (accountType === "corporate") {
-    const { data, error } = await supabaseAdmin
-      .from("corporates")
-      .select("id, company_name")
-      .eq("auth_user_id", user.id)
-      .single();
-    if (error || !data) return null;
-    return data as { id: string; company_name: string };
-  }
-
-  if (accountType === "corporate_employee") {
-    const { data: employee } = await supabaseAdmin
-      .from("corporate_employees")
-      .select("corporate_id, is_active")
-      .eq("auth_user_id", user.id)
-      .single();
-
-    const corporateId =
-      employee?.is_active && employee.corporate_id
-        ? employee.corporate_id
-        : (user.user_metadata?.corporate_id as string | undefined);
-
-    if (!corporateId) return null;
-
-    const { data, error } = await supabaseAdmin
-      .from("corporates")
-      .select("id, company_name")
-      .eq("id", corporateId)
-      .single();
-    if (error || !data) return null;
-    return data as { id: string; company_name: string };
-  }
-
-  return null;
+  const { data, error } = await supabaseAdmin
+    .from("corporates")
+    .select("id, company_name")
+    .eq("id", corporateId)
+    .single();
+  if (error || !data) return null;
+  return data as { id: string; company_name: string };
 }
 
 /**
@@ -101,6 +63,9 @@ export async function POST(request: Request) {
       duration_months: body.duration_months || null,
       min_trust_score: body.min_trust_score ?? 0,
       status: "open",
+      // Post CSR Project is a publish action — NGOs only see published rows.
+      lifecycle_status: "published",
+      published_at: new Date().toISOString(),
     })
     .select()
     .single();
