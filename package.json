@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "eslint",
     "seed:corporate-employees": "node tooling/scripts/seed-corporate-employees.mjs",
+    "seed:demo": "node tooling/scripts/seed-investor-demo.mjs",
     "ngo:import": "node tooling/scripts/ngo-enrichment/import-discovered.mjs",
     "ngo:enrich": "node tooling/scripts/ngo-enrichment/enrich.mjs",
     "ngo:enrich:dry": "node tooling/scripts/ngo-enrichment/enrich.mjs --dry-run",
@@ -22,21 +23,21 @@
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.106.1",
+    "@tailwindcss/postcss": "^4",
     "lucide-react": "^1.16.0",
     "next": "16.2.6",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "tailwindcss": "^4"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
-    "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
-    "@types/react": "^19",
+    "@types/react": "19.3.0",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "pg": "^8.21.0",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "5.9.3"
   }
 }

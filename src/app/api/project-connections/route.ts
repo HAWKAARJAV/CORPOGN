@@ -1,5 +1,4 @@
 import {
-  defaultNgoCandidates,
   mapConnectionRow,
   projectNameForFocus,
   type NgoCandidate,
@@ -119,7 +118,7 @@ async function loadCandidates(): Promise<NgoCandidate[]> {
     .in("access_status", ["verified", "active"])
     .order("trust_score", { ascending: false });
 
-  if (error || !data?.length) return defaultNgoCandidates;
+  if (error || !data?.length) return [];
 
   return data.map((ngo) => ({
     id: ngo.id,

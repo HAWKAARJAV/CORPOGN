@@ -18,6 +18,8 @@ import type { NgoRole } from "@/lib/ngo";
 import { AiAssistBadge, AiInsightLine } from "@/components/ai-assist-badge";
 import { AiTaskStreamPanel } from "@/components/ai-task-stream-panel";
 import { DashboardCopilot } from "@/components/dashboard-copilot";
+import { NgoRoleWorkQueue } from "@/components/ngo-role-work-queue";
+import { WorkspaceMilestonesPanel } from "@/components/workspace-milestones-panel";
 import { AI_PRODUCT_COPY } from "@/lib/ai-insights";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -3852,7 +3854,7 @@ function ProjectChatSection({
           <div className={`${cardCls} p-5 space-y-3`}>
             <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Project metrics</p>
             {[
-              { label: "Budget sanctioned", value: conn?.budget != null ? `₹${(conn.budget / 100000).toFixed(2)}L` : "Rs 25L" },
+              { label: "Budget sanctioned", value: conn?.budget != null ? `₹${(conn.budget / 100000).toFixed(2)}L` : "—" },
               { label: "Current milestone", value: conn?.milestone ?? "Kickoff" },
               { label: "Focus area", value: conn?.focus_area ?? "Education" },
               { label: "Status", value: conn?.status ?? "active" },
@@ -3874,30 +3876,37 @@ function ProjectChatSection({
 function FundTrackingSection({
   onNavigate,
   connection,
+  projectId,
+  token,
 }: {
   onNavigate: (id: string) => void;
   connection?: ProjectConnection;
+  projectId: string | null;
+  token: string;
 }) {
-  // Derive tranche amount from real budget if available (numeric INR → display)
+  const [funds, setFunds] = useState<Record<string, unknown>[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!projectId || !token) return;
+    setIsLoading(true);
+    setLoadError(null);
+    fetch(`/api/project-workspace/${projectId}/funds`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((body) => {
+        if (body.error) setLoadError(body.error);
+        else setFunds(body.items ?? []);
+      })
+      .catch(() => setLoadError("Could not load fund releases."))
+      .finally(() => setIsLoading(false));
+  }, [projectId, token]);
+
   const rawBudget = connection?.budget != null
-    ? `₹${(connection.budget / 100000).toFixed(2)}L`
-    : "Rs 25L";
-  const trancheAmt = "₹6,25,000"; // default; real projects would compute from budget
+    ? `₹${connection.budget.toLocaleString("en-IN")}`
+    : "—";
 
-  const tranches = [
-    { id: "T1", label: "Tranche 1 — Kickoff & Baseline", amount: trancheAmt, status: "unlocked", released: "28 May 2026" },
-    { id: "T2", label: "Tranche 2 — Phase 2 Implementation", amount: trancheAmt, status: "release_requested", released: "Awaiting approval" },
-    { id: "T3", label: "Tranche 3 — Phase 3 Field Operations", amount: trancheAmt, status: "locked", released: "—" },
-    { id: "T4", label: "Tranche 4 — Closure & Final UC", amount: trancheAmt, status: "locked", released: "—" },
-  ];
-  const ts: Record<string, { badge: string; dot: string; label: string }> = {
-    unlocked: { badge: "bg-emerald-100 text-emerald-700", dot: "bg-emerald-500", label: "Released" },
-    release_requested: { badge: "bg-amber-100 text-amber-700", dot: "bg-amber-400", label: "Awaiting Approval" },
-    locked: { badge: "bg-slate-100 text-slate-500", dot: "bg-slate-300", label: "Locked" },
-    blocked: { badge: "bg-red-100 text-red-600", dot: "bg-red-500", label: "Blocked" },
-  };
-
-  const progressPct = connection?.progress ?? 25;
+  const progressPct = connection?.progress ?? 0;
 
   return (
     <div className="space-y-6">
@@ -3921,8 +3930,21 @@ function FundTrackingSection({
 
       <div className="grid gap-4 sm:grid-cols-3">
         <KpiCard label="Total Sanctioned" value={rawBudget} icon={Wallet} color="blue" />
-        <KpiCard label="Released So Far" value={trancheAmt} icon={TrendingUp} color="emerald" sub="Tranche 1 — 25%" />
-        <KpiCard label="Project Progress" value={`${progressPct}%`} icon={BarChart3} color="violet" sub={connection?.milestone ?? "Kickoff"} />
+        <KpiCard
+          label="Released (workspace funds)"
+          value={
+            isLoading
+              ? "…"
+              : `₹${funds
+                  .filter((f) => f.released_at)
+                  .reduce((s, f) => s + Number(f.amount_inr ?? 0), 0)
+                  .toLocaleString("en-IN")}`
+          }
+          icon={TrendingUp}
+          color="emerald"
+          sub={`${funds.filter((f) => f.released_at).length} release(s)`}
+        />
+        <KpiCard label="Project Progress" value={`${progressPct}%`} icon={BarChart3} color="violet" sub={connection?.milestone ?? "—"} />
       </div>
 
       {/* Progress bar synced with corporate */}
@@ -3937,71 +3959,33 @@ function FundTrackingSection({
         <p className="mt-2 text-xs text-slate-400">Current milestone: <span className="font-medium text-slate-600">{connection?.milestone ?? "Kickoff and baseline"}</span></p>
       </div>
 
-      {/* Tranche table */}
       <div className={`${cardCls} divide-y divide-slate-50`}>
-        {tranches.map((t) => (
-          <div key={t.id} className="flex items-center gap-4 px-5 py-4">
-            <span className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${ts[t.status].dot}`} />
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-slate-800">{t.label}</p>
-              <p className="text-xs text-slate-400">{t.amount} · {t.released}</p>
-            </div>
-            <span className={`rounded-full px-3 py-0.5 text-xs font-semibold ${ts[t.status].badge}`}>
-              {ts[t.status].label}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      <Alert type="info"
-        title="Tranche 2 awaiting corporate approval"
-        body="Submit your Utilization Certificate for Tranche 1 to trigger the Tranche 2 release review on the corporate side."
-      />
-    </div>
-  );
-}
-
-// ─── Section: Milestone Reporting ────────────────────────────────────────────
-
-const MILESTONE_DEFS = [
-  { id: 1, label: "Baseline survey completed", due: "15 Jan 2026" },
-  { id: 2, label: "Infrastructure setup", due: "28 Feb 2026" },
-  { id: 3, label: "First batch of beneficiaries onboarded", due: "31 Mar 2026" },
-  { id: 4, label: "Mid-project evaluation", due: "30 Jun 2026" },
-];
-
-function MilestoneReportingSection({
-  milestoneStatuses, onMilestoneSubmit,
-}: {
-  milestoneStatuses: Record<number, string>;
-  onMilestoneSubmit: (id: number) => void;
-}) {
-
-  return (
-    <div className="space-y-6">
-      <SectionHeader title="Milestone Reporting" sub="Track and submit milestone progress reports." />
-      <div className={`${cardCls} divide-y divide-slate-50`}>
-        {MILESTONE_DEFS.map((m) => {
-          const status = milestoneStatuses[m.id] ?? "pending";
-          return (
-            <div key={m.id} className="flex items-center gap-4 px-5 py-4" data-testid={`milestone-${m.id}`}>
-              {status === "done"
-                ? <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-emerald-500" />
-                : status === "in-progress"
-                  ? <Clock className="h-5 w-5 flex-shrink-0 text-amber-500" />
-                  : <div className="h-5 w-5 flex-shrink-0 rounded-full border-2 border-slate-200" />
-              }
-              <div className="flex-1">
-                <p className={`text-sm font-semibold ${status === "done" ? "text-slate-400 line-through" : "text-slate-800"}`}>{m.label}</p>
-                <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5"><Calendar className="h-3 w-3" /> Due: {m.due}</p>
+        {loadError ? (
+          <p className="px-5 py-4 text-sm text-red-600">{loadError}</p>
+        ) : isLoading ? (
+          <p className="px-5 py-4 text-sm text-slate-400">Loading fund releases…</p>
+        ) : funds.length === 0 ? (
+          <p className="px-5 py-4 text-sm text-slate-400">No fund rows in the project workspace yet.</p>
+        ) : (
+          funds.map((f) => {
+            const released = Boolean(f.released_at);
+            return (
+              <div key={String(f.id)} className="flex items-center gap-4 px-5 py-4">
+                <span className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${released ? "bg-emerald-500" : "bg-amber-400"}`} />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-slate-800">{String(f.purpose ?? "Fund release")}</p>
+                  <p className="text-xs text-slate-400">
+                    ₹{Number(f.amount_inr ?? 0).toLocaleString("en-IN")}
+                    {released ? ` · ${String(f.released_at).slice(0, 10)}` : " · Scheduled"}
+                  </p>
+                </div>
+                <span className={`rounded-full px-3 py-0.5 text-xs font-semibold ${released ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                  {released ? "Released" : "Pending"}
+                </span>
               </div>
-              {status === "in-progress" && (
-                <button data-testid={`submit-milestone-${m.id}`} onClick={() => onMilestoneSubmit(m.id)} className={btnOutline + " text-xs py-1.5 px-3"}>Submit</button>
-              )}
-              {status === "done" && <span className="text-xs font-semibold text-emerald-600">Done ✓</span>}
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
     </div>
   );
@@ -4010,13 +3994,31 @@ function MilestoneReportingSection({
 // ─── Section: Impact Reporting ────────────────────────────────────────────────
 
 function ImpactReportingSection({
-  connection, token, ngoName,
+  connection, token, ngoName, projectId,
 }: {
   connection?: ProjectConnection;
   token: string;
   ngoName: string;
+  projectId?: string | null;
 }) {
   const [impactNotes, setImpactNotes] = useState("");
+  const [meKpis, setMeKpis] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!projectId || !token) return;
+    fetch(`/api/project-workspace/${projectId}/monitoring_evaluation`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((body) => {
+        const map: Record<string, number> = {};
+        for (const row of body.items ?? []) {
+          if (row.metric_name) map[String(row.metric_name)] = Number(row.metric_value ?? 0);
+        }
+        setMeKpis(map);
+      })
+      .catch(() => setMeKpis({}));
+  }, [projectId, token]);
   const photoRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLInputElement>(null);
   const pdfRef = useRef<HTMLInputElement>(null);
@@ -4077,9 +4079,9 @@ function ImpactReportingSection({
           corporatePartner: connection?.corporate_name ?? "Corporate partner",
           connectionStatus: connection?.status,
           illustrativeKpis: {
-            beneficiariesReached: 1240,
-            communitiesServed: 8,
-            reportsSubmitted: 2,
+            beneficiariesReached: meKpis["Beneficiaries reached"] ?? meKpis["Target beneficiaries"],
+            communitiesServed: meKpis["Active locations"],
+            learningImprovementPct: meKpis["Learning improvement"],
           },
           fieldNotes: impactNotes.trim() || undefined,
         }}
@@ -4878,7 +4880,7 @@ function ExpensesSection() {
   return (
     <NoBackingSection from="from-blue-600" to="to-indigo-700"
       eyebrow="Finance Officer · Expenses" title="Expenditure Tracker"
-      description="Log and review operational expenses against the sanctioned budget." />
+      description="No dedicated expenses table yet. Use Budget Tracking in the project workspace for real spend lines until this module ships." />
   );
 }
 
@@ -4886,7 +4888,7 @@ function InvoicesSection() {
   return (
     <NoBackingSection from="from-cyan-600" to="to-blue-700"
       eyebrow="Finance Officer · Invoices" title="Vendor Invoice Management"
-      description="Manage vendor and service-provider invoices." />
+      description="No dedicated invoices table yet. Use Funds and Budget Tracking in the project workspace for disbursement and utilization records." />
   );
 }
 
@@ -4990,13 +4992,17 @@ function ProjectsSection({ connections, onNavigate }: { connections: ProjectConn
 
 function MilestonesSection({ projectId, token }: { projectId: string | null; token: string }) {
   return (
-    <RoleModuleSection
-      from="from-teal-600" to="to-cyan-700"
-      eyebrow="Operations Manager · Milestones"
-      title="Milestone Delivery Tracker"
-      description="Real milestone entries recorded against your NGO's active CSR project."
-      module="milestones" projectId={projectId} token={token}
-    />
+    <div className="space-y-6">
+      <GradientHero
+        from="from-teal-600"
+        to="to-cyan-700"
+        eyebrow="Operations Manager · Milestones"
+        title="Milestone Delivery Tracker"
+        description="Same milestone records as Milestone Reporting — synced with the corporate partner via the shared workspace."
+        badge={projectId ? "Live workspace" : "No active project"}
+      />
+      <WorkspaceMilestonesPanel projectId={projectId} getToken={async () => token} />
+    </div>
   );
 }
 
@@ -5524,7 +5530,7 @@ export default function NgoDashboard({
     return false;
   }
 
-  function renderSection() {
+  function renderSectionBody() {
     const item = ALL_SIDEBAR_ITEMS.find((i) => i.id === activeSection);
     const primaryActiveConnection =
       projectConnections.find(
@@ -5572,17 +5578,31 @@ export default function NgoDashboard({
           }
         />
       );
-      case "fund-tracking": return <FundTrackingSection onNavigate={navigate} connection={primaryActiveConnection} />;
-      case "milestone-reporting": return (
-        <MilestoneReportingSection
-          milestoneStatuses={sharedState.milestones}
-          onMilestoneSubmit={(id) => updateSharedState((prev) => ({
-            ...prev,
-            milestones: { ...prev.milestones, [id]: "done" },
-          }))}
+      case "fund-tracking": return (
+        <FundTrackingSection
+          onNavigate={navigate}
+          connection={primaryActiveConnection}
+          projectId={activeProjectId}
+          token={token}
         />
       );
-      case "impact-reporting": return <ImpactReportingSection connection={primaryActiveConnection} token={token} ngoName={liveNgo.ngo_name} />;
+      case "milestone-reporting": return (
+        <div className="space-y-6">
+          <SectionHeader title="Milestone Reporting" sub="Update progress in the shared workspace — corporate partners see the same records." />
+          <WorkspaceMilestonesPanel
+            projectId={activeProjectId}
+            getToken={async () => token}
+          />
+        </div>
+      );
+      case "impact-reporting": return (
+        <ImpactReportingSection
+          connection={primaryActiveConnection}
+          token={token}
+          ngoName={liveNgo.ngo_name}
+          projectId={activeProjectId}
+        />
+      );
       case "utilization-cert": return <UtilizationCertSection connection={primaryActiveConnection} token={token} />;
       case "team-management":
       case "role-assignment": return <RoleAssignmentSection ngo={liveNgo} token={token} projectId={activeProjectId} />;
@@ -5647,6 +5667,24 @@ export default function NgoDashboard({
           </div>
         );
     }
+  }
+
+  function renderSection() {
+    const body = renderSectionBody();
+    const isRoleHome = activeSection === (ROLE_DEFAULT_SECTION[viewerRole] ?? "command-center");
+    if (!isRoleHome) return body;
+    return (
+      <div className="space-y-6 min-w-0">
+        <NgoRoleWorkQueue
+          role={viewerRole}
+          projectId={activeProjectId}
+          token={token}
+          onNavigate={navigate}
+          viewerAuthUserId={viewerAuthUserId}
+        />
+        {body}
+      </div>
+    );
   }
 
   const sidebarItems = getSidebarItems();
@@ -5744,7 +5782,7 @@ export default function NgoDashboard({
             </button>
           </div>
         </header>
-        <main className="flex-1 overflow-y-auto px-5 py-7 sm:px-8" data-testid="dashboard-main">
+        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden px-5 py-7 sm:px-8" data-testid="dashboard-main">
           {renderSection()}
         </main>
       </div>

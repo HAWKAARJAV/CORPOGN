@@ -176,3 +176,78 @@ export async function POST(request: Request, { params }: { params: Promise<{ pro
 
   return NextResponse.json({ item: data });
 }
+
+/** Fields clients may PATCH per module (business data must not live only in React state). */
+const PATCHABLE_FIELDS: Record<string, string[]> = {
+  milestones: ["title", "due_date", "status", "progress"],
+  tasks: ["title", "status", "due_date", "assigned_to"],
+  monitoring_evaluation: ["metric_name", "metric_value", "unit", "period"],
+  approvals: ["status", "item_ref", "approved_by"],
+  budget_tracking: ["line_item", "budgeted_inr", "spent_inr"],
+  campaigns: ["title", "description", "status"],
+};
+
+export async function PATCH(request: Request, { params }: { params: Promise<{ projectId: string; module: string }> }) {
+  const { projectId, module } = await params;
+  const table = MODULE_TABLES[module];
+  if (!table) return NextResponse.json({ error: `Unknown workspace module "${module}".` }, { status: 400 });
+
+  const access = await resolveAccess(request, projectId, module);
+  if ("error" in access) return NextResponse.json({ error: access.error }, { status: access.status });
+
+  if (access.permission !== "edit") {
+    return NextResponse.json({ error: `You have read-only access to the "${module}" module.` }, { status: 403 });
+  }
+
+  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const id = body.id;
+  if (!id || typeof id !== "string") {
+    return NextResponse.json({ error: "id is required." }, { status: 400 });
+  }
+
+  const allowed = PATCHABLE_FIELDS[module];
+  if (!allowed?.length) {
+    return NextResponse.json({ error: `Updates are not supported for module "${module}".` }, { status: 400 });
+  }
+
+  const patch: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (key in body) patch[key] = body[key];
+  }
+  if (Object.keys(patch).length === 0) {
+    return NextResponse.json({ error: "No updatable fields provided." }, { status: 400 });
+  }
+
+  const { data: existing, error: fetchError } = await supabaseAdmin
+    .from(table)
+    .select("id, project_id")
+    .eq("id", id)
+    .eq("project_id", projectId)
+    .maybeSingle();
+
+  if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 });
+  if (!existing) return NextResponse.json({ error: "Record not found." }, { status: 404 });
+
+  const { data: updated, error: updateError } = await supabaseAdmin
+    .from(table)
+    .update(patch)
+    .eq("id", id)
+    .eq("project_id", projectId)
+    .select()
+    .single();
+
+  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+
+  const actorType = access.context.accountType === "ngo_member" ? "ngo_worker" : access.context.accountType;
+  const { error: logError } = await supabaseAdmin.from("activity_logs").insert({
+    project_id: projectId,
+    module,
+    action: "updated",
+    actor_type: actorType,
+    actor_id: access.user.id,
+    detail: { record_id: id, patch },
+  });
+  if (logError) console.error("activity_logs insert failed:", logError.message);
+
+  return NextResponse.json({ item: updated });
+}

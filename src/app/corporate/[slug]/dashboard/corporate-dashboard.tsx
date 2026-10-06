@@ -3,6 +3,13 @@
 import { AiAssistBadge } from "@/components/ai-assist-badge";
 import { AiTaskStreamPanel } from "@/components/ai-task-stream-panel";
 import { DashboardCopilot } from "@/components/dashboard-copilot";
+import {
+  CorporateRoleHomeSection,
+  inferCorporateLandingRole,
+  metricLabelsForRole,
+  shouldShowPostedProjectsTable,
+} from "@/components/corporate-role-home-section";
+import { WorkspaceMilestonesPanel } from "@/components/workspace-milestones-panel";
 import { AI_PRODUCT_COPY } from "@/lib/ai-insights";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState, useRef } from "react";
@@ -50,7 +57,6 @@ import {
 } from "lucide-react";
 import { corporateSidebarItems } from "@/lib/corporate";
 import {
-  defaultNgoCandidates,
   projectNameForFocus,
   type NgoCandidate,
   type ProjectConnection,
@@ -102,7 +108,6 @@ type RoleDraft = RoleAccess & {
   password: string;
 };
 
-type Sector = "Rural Education" | "Healthcare" | "Women Empowerment";
 type Tone = "blue" | "green" | "amber" | "red" | "violet" | "slate";
 type Destination =
   | "Dashboard"
@@ -174,179 +179,6 @@ type CorporateRecommendation = {
   opportunities?: CsrOpportunity;
 };
 
-type Milestone = {
-  id: string;
-  title: string;
-  status: "Planned" | "In Progress" | "Submitted" | "Verified" | "Delayed";
-  dueDate: string;
-  tranche: number;
-  evidenceRequired: string;
-};
-
-type ImpactMetric = {
-  label: string;
-  target: number;
-  actual: number;
-  unit: string;
-};
-
-type Evidence = {
-  id: string;
-  title: string;
-  type: string;
-  status: "Pending" | "Submitted" | "Verified" | "Flagged";
-  proof: string;
-  submittedOn: string;
-};
-
-type Beneficiary = {
-  group: string;
-  count: number;
-  location: string;
-  consent: "Complete" | "Partial" | "Not Required";
-  proof: string;
-  verified: "Verified" | "Submitted" | "Pending";
-};
-
-type SectorSpend = {
-  sector: Sector;
-  category: string;
-  allocated: number;
-  released: number;
-  utilized: number;
-  proof: string;
-  status: "Verified" | "Submitted" | "Flagged" | "Pending";
-};
-
-type Campaign = {
-  id: string;
-  title: string;
-  sector: Sector;
-  ngoId: string;
-  status: "Active" | "Delayed" | "Review" | "Completed";
-  state: string;
-  district: string;
-  template: string;
-  summary: string;
-  conductedDates: string;
-  impactSummary: string;
-  budget: number;
-  allocated: number;
-  released: number;
-  utilized: number;
-  pendingRelease: number;
-  progress: number;
-  risk: "Low" | "Medium" | "High";
-  sdg: string;
-  nextAction: string;
-  milestones: Milestone[];
-  metrics: ImpactMetric[];
-  beneficiaries: Beneficiary[];
-  evidence: Evidence[];
-  sectorSpend: SectorSpend[];
-};
-
-type NgoPartner = {
-  id: string;
-  name: string;
-  sector: Sector;
-  state: string;
-  trustScore: number;
-  verification: "Verified" | "Under Review" | "Needs Renewal";
-  risk: "Low" | "Medium" | "High";
-  fieldPerformance: number;
-  documents: Array<{
-    name: string;
-    status: "Valid" | "Expiring" | "Missing" | "Expired";
-    receivedOn: string;
-    expiresOn?: string;
-    owner: string;
-    reference: string;
-  }>;
-};
-
-type Approval = {
-  id: string;
-  type:
-  | "Campaign Approval"
-  | "NGO Onboarding"
-  | "Budget Allocation"
-  | "Fund Release"
-  | "Utilization Certificate"
-  | "Impact Report";
-  title: string;
-  campaignId?: string;
-  ngoId?: string;
-  amount?: number;
-  status: "Pending" | "Approved" | "Rejected" | "Revision Requested";
-  priority: "Low" | "Medium" | "High" | "Critical";
-  owner: string;
-  createdAt: string;
-  comments: string[];
-};
-
-type Report = {
-  id: string;
-  title: string;
-  type: "CSR" | "ESG" | "Financial" | "Impact" | "NGO";
-  campaignId?: string;
-  status: "Draft" | "Submitted" | "Approved" | "Needs Revision";
-  updatedAt: string;
-};
-
-type WorkspaceNotification = {
-  id: string;
-  title: string;
-  body: string;
-  priority: "Normal" | "High" | "Critical";
-  read: boolean;
-  destination: Destination;
-  campaignId?: string;
-  ngoId?: string;
-  approvalId?: string;
-  createdAt: string;
-};
-
-type AuditLog = {
-  id: string;
-  action: string;
-  actor: string;
-  entity: string;
-  details: string;
-  time: string;
-};
-
-type AiInsight = {
-  id: string;
-  title: string;
-  body: string;
-  severity: "Low" | "Medium" | "High";
-  destination: Destination;
-  campaignId?: string;
-  ngoId?: string;
-};
-
-type Issue = {
-  id: string;
-  title: string;
-  owner: string;
-  severity: "Low" | "Medium" | "High" | "Critical";
-  status: "Open" | "In Progress" | "Closed";
-  campaignId?: string;
-  ngoId?: string;
-};
-
-type Workspace = {
-  campaigns: Campaign[];
-  ngos: NgoPartner[];
-  approvals: Approval[];
-  reports: Report[];
-  notifications: WorkspaceNotification[];
-  auditLogs: AuditLog[];
-  insights: AiInsight[];
-  issues: Issue[];
-};
-
 type NgoReviewProfile = {
   id: string;
   ngo_name: string;
@@ -407,28 +239,9 @@ const corporateShellItems = [
   "Discover NGOs",
 ] as const satisfies readonly Destination[];
 
-const sectorIcons: Record<Sector, React.ElementType> = {
-  "Rural Education": GraduationCap,
-  Healthcare: HeartPulse,
-  "Women Empowerment": HandHeart,
-};
-
 const roleAccessPages = corporateSidebarItems.filter(
   (item) => item !== "Support / Chat",
 );
-
-function createInitialWorkspace(): Workspace {
-  return {
-    campaigns: [],
-    ngos: [],
-    approvals: [],
-    reports: [],
-    notifications: [],
-    auditLogs: [],
-    insights: [],
-    issues: [],
-  };
-}
 
 // Employees must never be able to see Employee Management or Corporate
 // Profile, regardless of what's in their session metadata or the DB row —
@@ -472,13 +285,12 @@ export function CorporateDashboard({ slug }: { slug: string }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [workspace, setWorkspace] = useState<Workspace>(() => createInitialWorkspace());
   const [activeCampaignId, setActiveCampaignId] = useState("");
   const [activeNgoId, setActiveNgoId] = useState("");
   const [selectedApprovalId, setSelectedApprovalId] = useState("");
   const [campaignDetailTab, setCampaignDetailTab] = useState("Overview");
   const [projectConnections, setProjectConnections] = useState<ProjectConnection[]>([]);
-  const [ngoCandidates, setNgoCandidates] = useState<NgoCandidate[]>(defaultNgoCandidates);
+  const [ngoCandidates, setNgoCandidates] = useState<NgoCandidate[]>([]);
   const [assigningNgoId, setAssigningNgoId] = useState("");
   const [postedOpportunities, setPostedOpportunities] = useState<CsrOpportunity[]>([]);
   const [recommendations, setRecommendations] = useState<CorporateRecommendation[]>([]);
@@ -492,7 +304,8 @@ export function CorporateDashboard({ slug }: { slug: string }) {
   const hasActiveProject = projectConnections.some(
     (connection) => connection.status === "active" || connection.status === "completed",
   );
-  const unreadCount = workspace.notifications.filter((notification) => !notification.read).length;
+  const { data: portfolioOverview } = useWorkspaceOverview();
+  const unreadCount = portfolioOverview?.totals?.pendingApprovals ?? 0;
 
   // Items that require an active account unlock
   const accountLockedItems = new Set<string>(
@@ -707,7 +520,7 @@ export function CorporateDashboard({ slug }: { slug: string }) {
         setNgoCandidates(
           connectionResult.candidates?.length
             ? connectionResult.candidates
-            : defaultNgoCandidates,
+            : [],
         );
       } else if (connectionResult.error) {
         setErrorMessage(connectionResult.error);
@@ -790,27 +603,8 @@ export function CorporateDashboard({ slug }: { slug: string }) {
           table: "project_connections",
           filter: `corporate_id=eq.${corporate.id}`,
         },
-        (payload) => {
-          const raw = payload.new as Record<string, unknown>;
-          const projectName = String(raw.project_name ?? "CSR project");
-
-          if (raw.status === "proposal") {
-            setWorkspace((current) => ({
-              ...current,
-              notifications: [
-                {
-                  id: `notif-${String(raw.id)}-${Date.now()}`,
-                  title: "New NGO application received",
-                  body: `${projectName} has a new NGO applicant waiting for review.`,
-                  priority: "High",
-                  read: false,
-                  destination: "My Projects",
-                  createdAt: "Just now",
-                },
-                ...current.notifications,
-              ],
-            }));
-          }
+        () => {
+          // Proposal list refreshes when the user opens My Projects; no client-side mock notifications.
         },
       )
       .on(
@@ -865,10 +659,6 @@ export function CorporateDashboard({ slug }: { slug: string }) {
     setActiveItem(destination);
     if (focus?.campaignId) {
       setActiveCampaignId(focus.campaignId);
-      const campaign = workspace.campaigns.find((item) => item.id === focus.campaignId);
-      if (campaign) {
-        setActiveNgoId(campaign.ngoId);
-      }
     }
     if (focus?.ngoId) {
       setActiveNgoId(focus.ngoId);
@@ -888,277 +678,6 @@ export function CorporateDashboard({ slug }: { slug: string }) {
     setActiveItem("My Projects");
   }
 
-  function appendAudit(action: string, entity: string, details: string, actor = "Corporate Admin") {
-    setWorkspace((current) => ({
-      ...current,
-      auditLogs: [
-        {
-          id: `audit-${Date.now()}`,
-          action,
-          actor,
-          entity,
-          details,
-          time: "Just now",
-        },
-        ...current.auditLogs,
-      ],
-    }));
-  }
-
-  function appendNotification(notification: Omit<WorkspaceNotification, "id" | "createdAt" | "read">) {
-    setWorkspace((current) => ({
-      ...current,
-      notifications: [
-        {
-          id: `notif-${Date.now()}`,
-          createdAt: "Just now",
-          read: false,
-          ...notification,
-        },
-        ...current.notifications,
-      ],
-    }));
-  }
-
-  function requestFundRelease(campaignId: string) {
-    const campaign = workspace.campaigns.find((item) => item.id === campaignId);
-    if (!campaign) {
-      return;
-    }
-
-    const nextMilestone =
-      campaign.milestones.find((milestone) => milestone.status === "Submitted") ||
-      campaign.milestones.find((milestone) => milestone.status === "In Progress") ||
-      campaign.milestones[0];
-    const amount = nextMilestone?.tranche || 500000;
-    const approvalId = `approval-release-${Date.now()}`;
-
-    setWorkspace((current) => ({
-      ...current,
-      campaigns: current.campaigns.map((item) =>
-        item.id === campaignId
-          ? { ...item, pendingRelease: item.pendingRelease + amount }
-          : item,
-      ),
-      approvals: [
-        {
-          id: approvalId,
-          type: "Fund Release",
-          title: `Release ${formatINR(amount)} for ${campaign.title}`,
-          campaignId,
-          ngoId: campaign.ngoId,
-          amount,
-          status: "Pending",
-          priority: campaign.risk === "High" ? "High" : "Medium",
-          owner: "Finance Manager",
-          createdAt: "Just now",
-          comments: [`Linked milestone: ${nextMilestone?.title || "Program tranche"}`],
-        },
-        ...current.approvals,
-      ],
-    }));
-
-    setSelectedApprovalId(approvalId);
-    appendAudit("Fund release requested", campaign.title, `${formatINR(amount)} added to approval queue.`);
-    appendNotification({
-      title: "Fund release approval created",
-      body: `${campaign.title} now waits for Finance Manager review.`,
-      priority: "High",
-      destination: "Reports & Approvals",
-      campaignId,
-      ngoId: campaign.ngoId,
-      approvalId,
-    });
-    setActiveItem("Reports & Approvals");
-  }
-
-  function verifyNextMilestone(campaignId: string) {
-    const campaign = workspace.campaigns.find((item) => item.id === campaignId);
-    if (!campaign) {
-      return;
-    }
-
-    const milestone = campaign.milestones.find((item) => item.status !== "Verified");
-    if (!milestone) {
-      return;
-    }
-
-    setWorkspace((current) => ({
-      ...current,
-      campaigns: current.campaigns.map((item) =>
-        item.id === campaignId
-          ? {
-            ...item,
-            progress: Math.min(100, item.progress + 12),
-            utilized: Math.min(item.released, item.utilized + milestone.tranche),
-            status: item.status === "Delayed" ? "Active" : item.status,
-            risk: item.risk === "High" ? "Medium" : item.risk,
-            milestones: item.milestones.map((candidate) =>
-              candidate.id === milestone.id
-                ? { ...candidate, status: "Verified" }
-                : candidate,
-            ),
-            evidence: item.evidence.map((evidence) =>
-              evidence.status === "Submitted" ? { ...evidence, status: "Verified" } : evidence,
-            ),
-          }
-          : item,
-      ),
-      reports: [
-        {
-          id: `report-milestone-${Date.now()}`,
-          title: `${campaign.title} milestone verification note`,
-          type: "Impact",
-          campaignId,
-          status: "Submitted",
-          updatedAt: "Just now",
-        },
-        ...current.reports,
-      ],
-    }));
-
-    appendAudit("Milestone verified", campaign.title, `${milestone.title} verified and ESG evidence updated.`, "Field Auditor");
-    appendNotification({
-      title: "Milestone verified",
-      body: `${campaign.title}: ${milestone.title} now updates ESG and reporting readiness.`,
-      priority: "Normal",
-      destination: "ESG & Impact",
-      campaignId,
-      ngoId: campaign.ngoId,
-    });
-  }
-
-  function generateCampaignReport(campaignId: string) {
-    const campaign = workspace.campaigns.find((item) => item.id === campaignId);
-    if (!campaign) {
-      return;
-    }
-
-    const reportId = `report-${Date.now()}`;
-    const approvalId = `approval-report-${Date.now()}`;
-
-    setWorkspace((current) => ({
-      ...current,
-      reports: [
-        {
-          id: reportId,
-          title: `${campaign.title} board-ready impact report`,
-          type: "Impact",
-          campaignId,
-          status: "Submitted",
-          updatedAt: "Just now",
-        },
-        ...current.reports,
-      ],
-      approvals: [
-        {
-          id: approvalId,
-          type: "Impact Report",
-          title: `Approve generated report for ${campaign.title}`,
-          campaignId,
-          ngoId: campaign.ngoId,
-          status: "Pending",
-          priority: "Medium",
-          owner: "CSR Head",
-          createdAt: "Just now",
-          comments: ["Generated from campaign milestones, evidence, and impact metrics."],
-        },
-        ...current.approvals,
-      ],
-    }));
-
-    setSelectedApprovalId(approvalId);
-    appendAudit("Report generated", campaign.title, "Impact report added to approvals.");
-    appendNotification({
-      title: "Report generated",
-      body: `${campaign.title} report is ready for CSR Head approval.`,
-      priority: "High",
-      destination: "Reports & Approvals",
-      campaignId,
-      ngoId: campaign.ngoId,
-      approvalId,
-    });
-    setActiveItem("Reports & Approvals");
-  }
-
-  function decideApproval(approvalId: string, decision: Approval["status"]) {
-    const approval = workspace.approvals.find((item) => item.id === approvalId);
-    if (!approval) {
-      return;
-    }
-
-    setWorkspace((current) => ({
-      ...current,
-      approvals: current.approvals.map((item) =>
-        item.id === approvalId
-          ? {
-            ...item,
-            status: decision,
-            comments: [`${decision} just now`, ...item.comments],
-          }
-          : item,
-      ),
-      campaigns: current.campaigns.map((campaign) => {
-        if (campaign.id !== approval.campaignId) {
-          return campaign;
-        }
-
-        if (decision === "Approved" && approval.type === "Fund Release" && approval.amount) {
-          return {
-            ...campaign,
-            released: campaign.released + approval.amount,
-            pendingRelease: Math.max(0, campaign.pendingRelease - approval.amount),
-          };
-        }
-
-        return campaign;
-      }),
-      reports: current.reports.map((report) =>
-        report.campaignId === approval.campaignId && approval.type === "Impact Report"
-          ? {
-            ...report,
-            status: decision === "Approved" ? "Approved" : "Needs Revision",
-            updatedAt: "Just now",
-          }
-          : report,
-      ),
-    }));
-
-    appendAudit(
-      `${approval.type} ${decision.toLowerCase()}`,
-      approval.title,
-      approval.amount ? `${formatINR(approval.amount)} workflow updated.` : "Approval workflow updated.",
-      approval.owner,
-    );
-    appendNotification({
-      title: `${approval.type} ${decision.toLowerCase()}`,
-      body: approval.title,
-      priority: decision === "Approved" ? "Normal" : "High",
-      destination: approval.type === "Fund Release" ? "Budget & Fund Tracking" : "Reports & Approvals",
-      campaignId: approval.campaignId,
-      ngoId: approval.ngoId,
-      approvalId,
-    });
-  }
-
-  function markNotificationRead(notificationId: string) {
-    setWorkspace((current) => ({
-      ...current,
-      notifications: current.notifications.map((notification) =>
-        notification.id === notificationId ? { ...notification, read: true } : notification,
-      ),
-    }));
-  }
-
-  function markAllNotificationsRead() {
-    setWorkspace((current) => ({
-      ...current,
-      notifications: current.notifications.map((notification) => ({
-        ...notification,
-        read: true,
-      })),
-    }));
-  }
 
   function handleSidebarClick(item: string) {
     if (lockedItems.has(item)) {
@@ -1322,13 +841,6 @@ export function CorporateDashboard({ slug }: { slug: string }) {
         : [result.connection as ProjectConnection, ...current],
     );
 
-    appendNotification({
-      title: "Project assigned",
-      body: `${result.connection.project_name} is now assigned to ${result.connection.ngo_name}.`,
-      priority: "Normal",
-      destination: "Dashboard",
-    });
-
     // Refresh posted opportunities
     try {
       const oppResponse = await fetch("/api/corporates/opportunities", {
@@ -1394,12 +906,6 @@ export function CorporateDashboard({ slug }: { slug: string }) {
             : item,
         ),
       );
-      appendNotification({
-        title: "More recommendations requested",
-        body: `${recommendation.opportunities?.title ?? "Project"} was sent back to the admin research queue.`,
-        priority: "Normal",
-        destination: "Recommended NGOs",
-      });
       return;
     }
 
@@ -1423,12 +929,6 @@ export function CorporateDashboard({ slug }: { slug: string }) {
           ? current.map((connection) => (connection.id === result.connection?.id ? (result.connection as ProjectConnection) : connection))
           : [result.connection as ProjectConnection, ...current],
       );
-      appendNotification({
-        title: "Project allocated",
-        body: `${result.connection.project_name} is now allocated to ${result.connection.ngo_name}.`,
-        priority: "High",
-        destination: "Dashboard",
-      });
       setIsProjectWorkspaceOpen(true);
       setActiveItem("Dashboard");
     }
@@ -1607,7 +1107,7 @@ export function CorporateDashboard({ slug }: { slug: string }) {
             </div>
           </header>
 
-          <div className="mx-auto w-full max-w-7xl flex-1 space-y-5 px-4 py-5 sm:px-5 lg:p-6">
+          <div className="mx-auto w-full min-w-0 max-w-7xl flex-1 space-y-5 overflow-x-hidden px-4 py-5 sm:px-5 lg:p-6">
             {activeItem === "Support / Chat" ? (
               <ChatPanel
                 errorMessage={errorMessage}
@@ -1617,7 +1117,6 @@ export function CorporateDashboard({ slug }: { slug: string }) {
                 onMessageBodyChange={setMessageBody}
                 onSendMessage={sendMessage}
                 unlocked={isUnlocked}
-                workspace={workspace}
               />
             ) : activeItem === "My Projects" ? (
               <MyProjectsPage
@@ -1644,14 +1143,18 @@ export function CorporateDashboard({ slug }: { slug: string }) {
               <DashboardPage
                 companyName={corporate?.company_name || "Corporate Admin"}
                 navigateTo={navigateTo}
-                unreadCount={unreadCount}
                 postedOpportunities={postedOpportunities}
                 projectConnections={projectConnections}
                 onReviewProposal={(prop, opp) => {
                   setActiveComparisonProposal(prop);
                   setActiveComparisonOpp(opp);
                 }}
-                workspace={workspace}
+                viewerPosition={
+                  isCorporateEmployee
+                    ? employees[0]?.position ?? "Employee"
+                    : "Corporate Admin"
+                }
+                viewerAllowedPages={viewerAllowedPages ?? [...corporateSidebarItems]}
               />
             ) : activeItem === "Post CSR Project" ? (
               <PostCsrProjectPage
@@ -1706,12 +1209,7 @@ export function CorporateDashboard({ slug }: { slug: string }) {
                 onCreateEmployee={createEmployeeAccess}
               />
             ) : activeItem === "Notifications" ? (
-              <NotificationsPage
-                markAllNotificationsRead={markAllNotificationsRead}
-                markNotificationRead={markNotificationRead}
-                navigateTo={navigateTo}
-                workspace={workspace}
-              />
+              <NotificationsPage navigateTo={navigateTo} />
             ) : activeItem === "Corporate Profile" && corporate ? (
               <CorporateProfilePage
                 corporate={corporate}
@@ -2773,27 +2271,37 @@ function DashboardPage({
   postedOpportunities,
   projectConnections,
   onReviewProposal,
-  unreadCount,
-  workspace,
+  viewerPosition,
+  viewerAllowedPages,
 }: {
   companyName: string;
   navigateTo: (destination: Destination, focus?: { campaignId?: string; ngoId?: string; approvalId?: string }) => void;
   postedOpportunities: CsrOpportunity[];
   projectConnections: ProjectConnection[];
   onReviewProposal: (prop: ProjectConnection, opp: CsrOpportunity) => void;
-  unreadCount: number;
-  workspace: Workspace;
+  viewerPosition: string;
+  viewerAllowedPages: string[];
 }) {
-  const totals = getWorkspaceTotals(workspace);
-  const { data: overview } = useWorkspaceOverview();
+  const { data: overview, isLoading: overviewLoading } = useWorkspaceOverview();
+  const landingRole = inferCorporateLandingRole(viewerPosition, viewerAllowedPages);
+  const metricLabels = metricLabelsForRole(landingRole);
   const realTotals = overview?.totals;
-  const hasProjects = workspace.campaigns.length > 0 || postedOpportunities.length > 0;
-  const criticalItems = [
-    ...workspace.approvals.filter((approval) => approval.status === "Pending").slice(0, 3),
-    ...workspace.issues.filter((issue) => issue.status !== "Closed").slice(0, 2),
-  ];
+  const signedProjectCount = overview?.projects?.length ?? 0;
+  const hasProjects = postedOpportunities.length > 0 || signedProjectCount > 0;
+  const criticalItems =
+    overview?.approvals
+      ?.filter((a) => a.status === "pending")
+      .slice(0, 6)
+      .map((a) => ({
+        id: a.id,
+        title: `${a.itemType}${a.itemRef ? `: ${a.itemRef}` : ""}`,
+        owner: a.projectTitle ?? "Signed project",
+        priority: "High" as const,
+        campaignId: a.projectId,
+        ngoId: a.ngoId ?? "",
+      })) ?? [];
 
-  if (!hasProjects) {
+  if (!hasProjects && !overviewLoading) {
     return (
       <div className="space-y-6">
         <PageHero
@@ -2828,6 +2336,14 @@ function DashboardPage({
     );
   }
 
+  if (!hasProjects && overviewLoading) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
+        Loading your CSR portfolio…
+      </div>
+    );
+  }
+
   // Find proposals for each opportunity
   const getProposalsForOpp = (title: string) => {
     return projectConnections.filter(
@@ -2856,70 +2372,80 @@ function DashboardPage({
         }
       />
 
+      <CorporateRoleHomeSection
+        role={landingRole}
+        position={viewerPosition}
+        allowedPages={viewerAllowedPages}
+        navigateTo={(dest) => navigateTo(dest as Destination)}
+      />
+
       <section className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <MetricCard label="Annual CSR Budget" value={formatINR(realTotals?.projectBudget ?? 0)} meta={`${realTotals?.campaignCount ?? 0} live program${(realTotals?.campaignCount ?? 0) !== 1 ? "s" : ""}`} tone="blue" />
-        <MetricCard label="Released" value={formatINR(realTotals?.released ?? 0)} meta={`${realTotals?.releaseRate ?? 0}% of budget`} tone="green" />
-        <MetricCard label="Utilized" value={formatINR(realTotals?.spent ?? 0)} meta="UC and evidence linked" tone="violet" />
-        <MetricCard label="Pending Approvals" value={String(realTotals?.pendingApprovals ?? 0)} meta="Across funds, NGO, reports" tone="amber" />
-        <MetricCard label="Unread Alerts" value={String(unreadCount)} meta="Notifications requiring action" tone="red" />
+        <MetricCard label={metricLabels.budget} value={formatINR(realTotals?.projectBudget ?? 0)} meta={`${realTotals?.campaignCount ?? 0} live program${(realTotals?.campaignCount ?? 0) !== 1 ? "s" : ""}`} tone="blue" />
+        <MetricCard label={metricLabels.released} value={formatINR(realTotals?.released ?? 0)} meta={`${realTotals?.releaseRate ?? 0}% of budget`} tone="green" />
+        <MetricCard label={metricLabels.utilized} value={formatINR(realTotals?.spent ?? 0)} meta="UC and evidence linked" tone="violet" />
+        <MetricCard label={metricLabels.pending} value={String(realTotals?.pendingApprovals ?? 0)} meta="Across funds, NGO, reports" tone="amber" />
+        <MetricCard label={metricLabels.audits} value={String(realTotals?.openAudits ?? 0)} meta="From signed project workspaces" tone="red" />
       </section>
 
       <section className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)]">
         <div className="space-y-6">
-          {workspace.campaigns.length > 0 && (
+          {(overview?.projects?.length ?? 0) > 0 && (
             <Card>
               <SectionHeading
                 icon={Workflow}
-                title="Campaign Operating Board"
-                text="Each campaign links directly to NGO, budget, evidence, approvals, and reporting."
+                title="Signed project portfolio"
+                text="Live totals from workspace modules in Supabase — same data as Campaign Management and Master Analytics."
               />
               <div className="-mx-1 overflow-x-auto">
                 <table className="w-full min-w-[700px] border-collapse text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50/80">
-                      <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Campaign</th>
+                      <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Project</th>
                       <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">NGO</th>
                       <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Budget</th>
-                      <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 min-w-[120px]">Progress</th>
-                      <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Risk</th>
+                      <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 min-w-[120px]">Utilization</th>
+                      <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Approvals</th>
                       <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Next Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {workspace.campaigns.map((campaign) => {
-                      const ngo = getNgo(workspace, campaign.ngoId);
-                      return (
-                        <tr
-                          className="cursor-pointer transition-colors hover:bg-blue-50/40"
-                          key={campaign.id}
-                          onClick={() => navigateTo("Campaign Management", { campaignId: campaign.id })}
-                        >
-                          <td className="px-3 py-3.5 align-top">
-                            <p className="font-semibold text-slate-900 leading-snug">{campaign.title}</p>
-                            <p className="mt-0.5 text-xs text-slate-500">{campaign.sector} · {campaign.district}</p>
-                          </td>
-                          <td className="px-3 py-3.5 align-top text-sm text-slate-600 whitespace-nowrap">{ngo?.name}</td>
-                          <td className="px-3 py-3.5 align-top text-sm font-semibold text-slate-900 whitespace-nowrap">{formatINR(campaign.budget)}</td>
-                          <td className="px-3 py-3.5 align-top min-w-[130px]">
-                            <Progress value={campaign.progress} />
-                          </td>
-                          <td className="px-3 py-3.5 align-top"><RiskBadge value={campaign.risk} /></td>
-                          <td className="px-3 py-3.5 align-top text-sm text-slate-600 max-w-[180px]">{campaign.nextAction}</td>
-                        </tr>
-                      );
-                    })}
+                    {(overview?.projects ?? []).map((project) => (
+                      <tr
+                        className="cursor-pointer transition-colors hover:bg-blue-50/40"
+                        key={project.id}
+                        onClick={() => navigateTo("Campaign Management", { campaignId: project.id })}
+                      >
+                        <td className="px-3 py-3.5 align-top">
+                          <p className="font-semibold text-slate-900 leading-snug">{project.title}</p>
+                          <p className="mt-0.5 text-xs text-slate-500">
+                            {project.focusArea ?? "—"} · {project.district ?? project.state ?? "—"}
+                          </p>
+                        </td>
+                        <td className="px-3 py-3.5 align-top text-sm text-slate-600 whitespace-nowrap">{project.ngo?.name ?? "—"}</td>
+                        <td className="px-3 py-3.5 align-top text-sm font-semibold text-slate-900 whitespace-nowrap">
+                          {formatINR(project.totals.projectBudget)}
+                        </td>
+                        <td className="px-3 py-3.5 align-top min-w-[130px]">
+                          <Progress value={project.totals.utilizationRate} />
+                        </td>
+                        <td className="px-3 py-3.5 align-top text-sm text-slate-600">{project.counts.pendingApprovals}</td>
+                        <td className="px-3 py-3.5 align-top text-sm text-slate-600 max-w-[180px]">
+                          {project.counts.pendingApprovals > 0 ? "Review approvals" : "Open workspace"}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
             </Card>
           )}
 
-          {postedOpportunities.length > 0 && (
+          {postedOpportunities.length > 0 && shouldShowPostedProjectsTable(landingRole) && (
             <Card>
               <SectionHeading
                 icon={PlusCircle}
                 title="Posted CSR Projects & NGO Applications"
-                text="Track applications and assign registered NGOs to initiate campaigns."
+                text="Track applications and assign registered NGOs to initiate signed projects."
               />
               <div className="grid gap-4 mt-4">
                 {postedOpportunities.map((opp) => {
@@ -2991,58 +2517,46 @@ function DashboardPage({
               </p>
             ) : null}
             <div className="space-y-3">
-              {criticalItems.map((item) => {
-                const isApproval = "type" in item;
-                return (
-                  <button
-                    className="w-full min-w-0 rounded-md border border-slate-200 bg-slate-50 p-3 text-left transition hover:border-blue-200 hover:bg-blue-50"
-                    key={item.id}
-                    onClick={() =>
-                      isApproval
-                        ? navigateTo("Reports & Approvals", {
-                          campaignId: item.campaignId,
-                          ngoId: item.ngoId,
-                          approvalId: item.id,
-                        })
-                        : navigateTo("Audit & Compliance", {
-                          campaignId: item.campaignId,
-                          ngoId: item.ngoId,
-                        })
-                    }
-                    type="button"
-                  >
-                    <div className="flex min-w-0 items-center justify-between gap-3">
-                      <p className="min-w-0 break-words text-sm font-semibold text-slate-900">{item.title}</p>
-                      <RiskBadge value={isApproval ? item.priority : item.severity} />
-                    </div>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {isApproval ? item.owner : item.owner}
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
-          </Card>
-          <Card>
-            <SectionHeading icon={Sparkles} title="Priority Signals" text="Signals are derived from the same campaign, budget, NGO, and audit data." />
-            {workspace.insights.length === 0 ? (
-              <p className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-xs text-slate-400">
-                No signals yet — these build up as your campaigns, budgets, and audits accumulate activity.
-              </p>
-            ) : null}
-            <div className="space-y-3">
-              {workspace.insights.slice(0, 3).map((insight) => (
+              {criticalItems.map((item) => (
                 <button
-                  className="w-full min-w-0 rounded-md border border-slate-200 bg-white p-3 text-left hover:border-violet-200 hover:bg-violet-50"
-                  key={insight.id}
-                  onClick={() => navigateTo(insight.destination, { campaignId: insight.campaignId, ngoId: insight.ngoId })}
+                  className="w-full min-w-0 rounded-md border border-slate-200 bg-slate-50 p-3 text-left transition hover:border-blue-200 hover:bg-blue-50"
+                  key={item.id}
+                  onClick={() =>
+                    navigateTo("Reports & Approvals", {
+                      campaignId: item.campaignId,
+                      ngoId: item.ngoId,
+                      approvalId: item.id,
+                    })
+                  }
                   type="button"
                 >
-                  <p className="break-words text-sm font-semibold text-slate-900">{insight.title}</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">{insight.body}</p>
+                  <div className="flex min-w-0 items-center justify-between gap-3">
+                    <p className="min-w-0 break-words text-sm font-semibold text-slate-900">{item.title}</p>
+                    <RiskBadge value={item.priority} />
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">{item.owner}</p>
                 </button>
               ))}
             </div>
+          </Card>
+          <Card>
+            <SectionHeading icon={Activity} title="Recent workspace activity" text="From the platform activity log for signed projects." />
+            {(overview?.activity?.length ?? 0) === 0 ? (
+              <p className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-xs text-slate-400">
+                Activity appears when teams update milestones, funds, approvals, or M&amp;E in the project workspace.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {(overview?.activity ?? []).slice(0, 5).map((log) => (
+                  <div key={log.id} className="rounded-md border border-slate-200 bg-white p-3 text-left">
+                    <p className="text-sm font-semibold text-slate-900">{titleCase(log.action)}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {log.projectTitle} · {log.module} · {formatDate(log.createdAt)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
           </Card>
         </div>
       </section>
@@ -3639,7 +3153,7 @@ function CampaignManagementPage({
   const projectAudits = (data?.audits ?? []).filter((a) => a.projectId === activeCampaign?.projectId);
   const projectMetrics = (data?.metrics ?? []).filter((m) => m.projectId === activeCampaign?.projectId);
 
-  const tabs = ["Overview", "Budget", "NGO", "Approvals", "Reports", "Audits", "Impact"];
+  const tabs = ["Overview", "Budget", "Milestones", "NGO", "Approvals", "Reports", "Audits", "Impact"];
 
   /**
    * Real write: raises a fund-release approval row on the campaign's project
@@ -3668,6 +3182,32 @@ function CampaignManagementPage({
     }
   }
 
+  async function submitCampaignReportDraft() {
+    if (!activeCampaign) return;
+    setActionState({ busy: true, message: null, tone: "ok" });
+    const { data: sessionData } = await supabaseBrowser.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) {
+      setActionState({ busy: false, message: "Your session has expired. Please sign in again.", tone: "error" });
+      return;
+    }
+    const res = await fetch(`/api/project-workspace/${activeCampaign.projectId}/reports`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        title: `${activeCampaign.title} impact report`,
+        report_type: "impact",
+      }),
+    });
+    const body = await res.json();
+    if (res.ok) {
+      setActionState({ busy: false, message: "Report recorded in the project workspace.", tone: "ok" });
+      reload();
+    } else {
+      setActionState({ busy: false, message: body.error ?? "Could not save the report.", tone: "error" });
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHero
@@ -3680,6 +3220,9 @@ function CampaignManagementPage({
               <ActionButton icon={CircleDollarSign} onClick={requestFundReleaseForCampaign}>
                 {actionState.busy ? "Requesting…" : "Request Fund Release"}
               </ActionButton>
+              <GhostButton icon={FileText} onClick={submitCampaignReportDraft}>
+                Add impact report
+              </GhostButton>
               <GhostButton icon={FolderKanban} onClick={() => navigateTo("My Projects")}>
                 Open Project Workspace
               </GhostButton>
@@ -3813,6 +3356,19 @@ function CampaignManagementPage({
                   ) : (
                     <p className="text-sm text-slate-400">No budget lines recorded on this project yet.</p>
                   )
+                ) : null}
+
+                {campaignDetailTab === "Milestones" && activeCampaign ? (
+                  <WorkspaceMilestonesPanel
+                    projectId={activeCampaign.projectId}
+                    canEdit={false}
+                    getToken={async () => {
+                      const { data: sessionData } = await supabaseBrowser.auth.getSession();
+                      return sessionData.session?.access_token ?? null;
+                    }}
+                    title="Shared milestones"
+                    description="Updates made by the NGO in the project workspace appear here after refresh."
+                  />
                 ) : null}
 
                 {campaignDetailTab === "NGO" ? (
@@ -5340,59 +4896,65 @@ function AuditCompliancePage({
 }
 
 function NotificationsPage({
-  markAllNotificationsRead,
-  markNotificationRead,
   navigateTo,
-  workspace,
 }: {
-  markAllNotificationsRead: () => void;
-  markNotificationRead: (notificationId: string) => void;
   navigateTo: (destination: Destination, focus?: { campaignId?: string; ngoId?: string; approvalId?: string }) => void;
-  workspace: Workspace;
 }) {
+  const { data, isLoading, error } = useWorkspaceOverview();
+  const pending = (data?.approvals ?? []).filter((a) => a.status === "pending");
+  const activity = data?.activity ?? [];
+
   return (
     <div className="space-y-6">
       <PageHero
         eyebrow="Notifications"
-        title="Connected alerts and workflow reminders"
-        text="Notifications route directly to campaign, NGO, approval, budget, AI, and compliance context."
-        actions={
-          <ActionButton icon={CheckCircle2} onClick={markAllNotificationsRead}>
-            Mark All Read
-          </ActionButton>
-        }
+        title="Workflow queue from live project data"
+        text="Pending approvals and recent workspace activity — no placeholder notification feed."
       />
 
+      <OverviewGate isLoading={isLoading} error={error} isEmpty={pending.length === 0 && activity.length === 0} icon={Bell} emptyTitle="No pending workflow items" emptyText="When approvals are raised or workspace modules change, they appear here.">
       <Card>
-        <SectionHeading icon={Bell} title="Notification Center" text="Clicking an alert marks it read and opens the related workflow." />
+        <SectionHeading icon={Bell} title="Pending approvals" text="Open the approval workflow for the related project." />
         <div className="space-y-3">
-          {workspace.notifications.map((notification) => (
+          {pending.map((approval) => (
             <button
-              className={`w-full rounded-lg border p-4 text-left transition ${notification.read
-                  ? "border-slate-100 bg-white"
-                  : "border-blue-200 bg-blue-50"
-                } hover:border-blue-300`}
-              key={notification.id}
+              className="w-full rounded-lg border border-blue-200 bg-blue-50 p-4 text-left transition hover:border-blue-300"
+              key={approval.id}
               onClick={() => {
-                markNotificationRead(notification.id);
-                navigateTo(notification.destination, {
-                  campaignId: notification.campaignId,
-                  ngoId: notification.ngoId,
-                  approvalId: notification.approvalId,
+                navigateTo("Reports & Approvals", {
+                  campaignId: approval.projectId,
+                  ngoId: approval.ngoId ?? undefined,
+                  approvalId: approval.id,
                 });
               }}
               type="button"
             >
               <div className="flex items-center justify-between gap-3">
-                <p className="font-semibold text-slate-900">{notification.title}</p>
-                <RiskBadge value={notification.priority === "Normal" ? "Low" : notification.priority} />
+                <p className="font-semibold text-slate-900">{approval.itemType}</p>
+                <RiskBadge value="High" />
               </div>
-              <p className="mt-1 text-sm text-slate-600">{notification.body}</p>
-              <p className="mt-2 text-xs font-semibold text-slate-400">{notification.createdAt} - opens {notification.destination}</p>
+              <p className="mt-1 text-sm text-slate-600">
+                {approval.projectTitle}
+                {approval.itemRef ? ` — ${approval.itemRef}` : ""}
+              </p>
             </button>
           ))}
         </div>
       </Card>
+
+      <Card className="mt-6">
+        <SectionHeading icon={Activity} title="Recent activity" text="Immutable workspace log entries." />
+        <div className="space-y-3">
+          {activity.slice(0, 12).map((log) => (
+            <div key={log.id} className="rounded-lg border border-slate-200 bg-white p-4">
+              <p className="font-semibold text-slate-900">{titleCase(log.action)}</p>
+              <p className="mt-1 text-sm text-slate-600">{log.projectTitle} · {log.module}</p>
+              <p className="mt-2 text-xs text-slate-400">{formatDate(log.createdAt)}</p>
+            </div>
+          ))}
+        </div>
+      </Card>
+      </OverviewGate>
     </div>
   );
 }
@@ -5597,7 +5159,6 @@ function ChatPanel({
   onMessageBodyChange,
   onSendMessage,
   unlocked,
-  workspace,
 }: {
   errorMessage: string;
   isSending: boolean;
@@ -5606,7 +5167,6 @@ function ChatPanel({
   onMessageBodyChange: (value: string) => void;
   onSendMessage: (event: FormEvent<HTMLFormElement>) => void;
   unlocked: boolean;
-  workspace: Workspace;
 }) {
   return (
     <div className="space-y-6">
@@ -5662,333 +5222,20 @@ function ChatPanel({
         </Card>
 
         <Card>
-          <SectionHeading icon={MessageCircle} title="Contextual Support Threads" text="Examples of support issues tied to workspace objects." />
-          <div className="space-y-3">
-            {workspace.issues.map((issue) => (
-              <div className="rounded-md border border-slate-200 bg-slate-50 p-3" key={issue.id}>
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-slate-900">{issue.title}</p>
-                  <RiskBadge value={issue.severity} />
-                </div>
-                <p className="mt-1 text-xs text-slate-500">Owner: {issue.owner}</p>
-              </div>
-            ))}
-          </div>
+          <SectionHeading
+            icon={MessageCircle}
+            title="Workflow context"
+            text="Reference a project by name in your message. Pending approvals and audit items live under Reports & Approvals and Audit & Compliance."
+          />
+          <p className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+            No separate support-ticket feed is stored here. Use Notifications for pending approvals from live workspace data.
+          </p>
         </Card>
       </section>
     </div>
   );
 }
 
-function MilestoneList({ campaign }: { campaign: Campaign }) {
-  return (
-    <div className="space-y-3">
-      {campaign.milestones.map((milestone) => (
-        <div className="rounded-md border border-slate-200 bg-slate-50 p-4" key={milestone.id}>
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-            <div>
-              <p className="font-semibold text-slate-900">{milestone.title}</p>
-              <p className="mt-1 text-sm text-slate-500">{milestone.evidenceRequired}</p>
-            </div>
-            <StatusBadge value={milestone.status} />
-          </div>
-          <div className="mt-3 flex flex-wrap gap-4 text-xs font-medium text-slate-500">
-            <span>Due {milestone.dueDate}</span>
-            <span>Tranche {formatINR(milestone.tranche)}</span>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function BudgetBreakdown({ campaign }: { campaign: Campaign }) {
-  return (
-    <div className="grid min-w-0 gap-4 md:grid-cols-2">
-      <MetricCard label="Budget" value={formatINR(campaign.budget)} meta="Sanctioned campaign budget" tone="blue" />
-      <MetricCard label="Allocated" value={formatINR(campaign.allocated)} meta={`${campaign.budget > 0 ? Math.round((campaign.allocated / campaign.budget) * 100) : 0}% of budget`} tone="violet" />
-      <MetricCard label="Released" value={formatINR(campaign.released)} meta={`${campaign.budget > 0 ? Math.round((campaign.released / campaign.budget) * 100) : 0}% released`} tone="green" />
-      <MetricCard label="Utilized" value={formatINR(campaign.utilized)} meta="UC-backed and evidence linked" tone="amber" />
-    </div>
-  );
-}
-
-function BudgetAnalysisPanel({ workspace }: { workspace: Workspace }) {
-  const totals = getWorkspaceTotals(workspace);
-  const sectorRows = workspace.campaigns.flatMap((campaign) =>
-    campaign.sectorSpend.map((spend) => ({
-      campaign,
-      spend,
-      variance: spend.released - spend.utilized,
-    })),
-  );
-  const flaggedRows = sectorRows.filter(({ spend }) => spend.status === "Flagged" || spend.status === "Pending");
-
-  return (
-    <Card className="border-blue-200 bg-blue-50/40">
-      <SectionHeading
-        icon={BarChart3}
-        title="Budget Analysis"
-        text="Formal view of allocation, release, utilization, sector spend, and proof status."
-      />
-      <div className="space-y-5">
-        <div className="grid gap-5 xl:grid-cols-[0.85fr_1.15fr]">
-          <StackedFlowBar
-            items={[
-              { label: "Allocated", value: totals.allocated, color: "bg-violet-500" },
-              { label: "Released", value: totals.released, color: "bg-emerald-500" },
-              { label: "Utilized", value: totals.utilized, color: "bg-blue-600" },
-            ]}
-            max={totals.budget}
-            title="Annual CSR Fund Flow"
-          />
-          <SimpleTable
-            headers={["Sector", "Category", "Campaign", "Utilized", "Proof", "Status"]}
-            rows={sectorRows.map(({ campaign, spend }) => [
-              spend.sector,
-              spend.category,
-              campaign.title,
-              formatINR(spend.utilized),
-              spend.proof,
-              spend.status,
-            ])}
-          />
-        </div>
-        <SimpleTable
-          headers={["Campaign", "Allocated", "Released", "Utilized", "Use Rate", "Proof"]}
-          rows={workspace.campaigns.map((campaign) => [
-            campaign.title,
-            formatINR(campaign.allocated),
-            formatINR(campaign.released),
-            formatINR(campaign.utilized),
-            `${campaign.allocated > 0 ? Math.round((campaign.utilized / campaign.allocated) * 100) : 0}%`,
-            campaign.evidence.some((item) => item.status === "Flagged") ? "Flagged" : "Linked",
-          ])}
-        />
-        {flaggedRows.length > 0 && (
-          <SimpleTable
-            headers={["Variance Watch", "Released − Utilized", "Owner Action", "Status"]}
-            rows={flaggedRows.map(({ campaign, spend, variance }) => [
-              campaign.title,
-              formatINR(variance),
-              spend.status === "Flagged" ? "Review proof before next release" : "Collect missing utilization proof",
-              spend.status,
-            ])}
-          />
-        )}
-      </div>
-    </Card>
-  );
-}
-
-function SdgAnalysisPanel({ workspace }: { workspace: Workspace }) {
-  const totalBeneficiaries = workspace.campaigns.reduce(
-    (sum, campaign) => sum + campaign.beneficiaries.reduce((inner, beneficiary) => inner + beneficiary.count, 0),
-    0,
-  );
-  const sdgSegments = workspace.campaigns.map((campaign) => ({
-    label: `${campaign.sdg} - ${campaign.sector}`,
-    value: campaign.beneficiaries.reduce((sum, beneficiary) => sum + beneficiary.count, 0),
-    color: campaign.sector === "Healthcare" ? "#10b981" : campaign.sector === "Women Empowerment" ? "#f59e0b" : "#2563eb",
-  }));
-
-  return (
-    <Card className="border-emerald-200 bg-emerald-50/30">
-      <SectionHeading
-        icon={PieChart}
-        title="SDG And Beneficiary Analysis"
-        text="Click-open view showing SDG share, beneficiary proofs, and evidence readiness."
-      />
-      <div className="grid min-w-0 gap-5 xl:grid-cols-[0.75fr_1.25fr]">
-        <div>
-          <PieVisual segments={sdgSegments} total={totalBeneficiaries} />
-          <div className="mt-4 space-y-2">
-            {sdgSegments.map((segment) => (
-              <div className="flex items-center justify-between text-sm" key={segment.label}>
-                <span className="flex items-center gap-2 font-medium text-slate-700">
-                  <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: segment.color }} />
-                  {segment.label}
-                </span>
-                <span className="font-semibold text-slate-950">{totalBeneficiaries > 0 ? Math.round((segment.value / totalBeneficiaries) * 100) : 0}%</span>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="space-y-4">
-          <SimpleTable
-            headers={["Campaign", "Beneficiary Group", "Count", "Consent", "Proof", "Verification"]}
-            rows={workspace.campaigns.flatMap((campaign) =>
-              campaign.beneficiaries.map((beneficiary) => [
-                campaign.title,
-                beneficiary.group,
-                beneficiary.count.toLocaleString("en-IN"),
-                beneficiary.consent,
-                beneficiary.proof,
-                beneficiary.verified,
-              ]),
-            )}
-          />
-          <SimpleTable
-            headers={["Campaign", "Impact Metric", "Actual", "Target", "Completion"]}
-            rows={workspace.campaigns.flatMap((campaign) =>
-              campaign.metrics.map((metric) => [
-                campaign.title,
-                metric.label,
-                `${metric.actual.toLocaleString("en-IN")} ${metric.unit}`,
-                `${metric.target.toLocaleString("en-IN")} ${metric.unit}`,
-                `${metric.target > 0 ? Math.round((metric.actual / metric.target) * 100) : 0}%`,
-              ]),
-            )}
-          />
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-function CampaignBriefPanel({ campaign, ngoName }: { campaign: Campaign; ngoName: string }) {
-  const beneficiaryTotal = campaign.beneficiaries.reduce((sum, beneficiary) => sum + beneficiary.count, 0);
-  const verifiedEvidence = campaign.evidence.filter((item) => item.status === "Verified").length;
-
-  return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-      <SectionHeading
-        icon={Table2}
-        title="Campaign Analysis Brief"
-        text="Board-ready campaign knowledge in one controlled view."
-      />
-      <div className="grid gap-3 md:grid-cols-4">
-        <MiniStat label="Conducted Dates" value={campaign.conductedDates} />
-        <MiniStat label="NGO Partner" value={ngoName} />
-        <MiniStat label="SDG" value={campaign.sdg} />
-        <MiniStat label="Beneficiaries" value={beneficiaryTotal.toLocaleString("en-IN")} />
-      </div>
-      <div className="mt-4 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-        <div className="space-y-4">
-          <p className="rounded-lg border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-600">
-            <span className="font-semibold text-slate-900">Summary: </span>
-            {campaign.summary}
-          </p>
-          <p className="rounded-lg border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-600">
-            <span className="font-semibold text-slate-900">Impact: </span>
-            {campaign.impactSummary}
-          </p>
-          <StackedFlowBar
-            items={[
-              { label: "Allocated", value: campaign.allocated, color: "bg-violet-500" },
-              { label: "Released", value: campaign.released, color: "bg-emerald-500" },
-              { label: "Utilized", value: campaign.utilized, color: "bg-blue-600" },
-            ]}
-            max={campaign.budget}
-            title="Campaign Fund Position"
-          />
-        </div>
-        <SimpleTable
-          headers={["Proof Area", "Reference", "Date", "Status"]}
-          rows={[
-            ...campaign.evidence.map((item) => [item.title, item.proof, item.submittedOn, item.status]),
-            ["Evidence Readiness", `${verifiedEvidence}/${campaign.evidence.length} verified`, "Live", verifiedEvidence === campaign.evidence.length ? "Verified" : "Submitted"],
-          ]}
-        />
-      </div>
-    </div>
-  );
-}
-
-function NgoAnalysisPanel({ campaigns, ngo }: { campaigns: Campaign[]; ngo: NgoPartner }) {
-  const released = campaigns.reduce((sum, campaign) => sum + campaign.released, 0);
-  const utilized = campaigns.reduce((sum, campaign) => sum + campaign.utilized, 0);
-
-  return (
-    <div className="mt-6 rounded-lg border border-blue-200 bg-blue-50/40 p-4">
-      <SectionHeading
-        icon={Clock}
-        title="NGO Document Register"
-        text="Received documents, expiry clock, campaign totals, and compliance gaps."
-      />
-      <div className="mb-4 grid gap-3 md:grid-cols-4">
-        <MiniStat label="Total Campaigns" value={String(campaigns.length)} />
-        <MiniStat label="Released" value={formatINR(released)} />
-        <MiniStat label="Utilized" value={formatINR(utilized)} />
-        <MiniStat label="Document Gaps" value={String(ngo.documents.filter((document) => document.status !== "Valid").length)} />
-      </div>
-      <SimpleTable
-        headers={["Document", "Reference", "Received", "Expiry Clock", "Owner", "Status"]}
-        rows={ngo.documents.map((document) => [
-          document.name,
-          document.reference,
-          document.receivedOn,
-          getExpiryClock(document),
-          document.owner,
-          document.status,
-        ])}
-      />
-    </div>
-  );
-}
-
-function StackedFlowBar({
-  items,
-  max,
-  title,
-}: {
-  items: Array<{ label: string; value: number; color: string }>;
-  max: number;
-  title: string;
-}) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <p className="text-sm font-semibold text-slate-900">{title}</p>
-      <div className="mt-4 space-y-3">
-        {items.map((item) => (
-          <div key={item.label}>
-            <div className="mb-1 flex items-center justify-between text-xs font-semibold text-slate-600">
-              <span>{item.label}</span>
-              <span>{formatINR(item.value)}</span>
-            </div>
-            <div className="h-3 overflow-hidden rounded-full bg-slate-100">
-              <div className={`h-full rounded-full ${item.color}`} style={{ width: `${Math.min(100, (item.value / max) * 100)}%` }} />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function PieVisual({
-  segments,
-  total,
-}: {
-  segments: Array<{ label: string; value: number; color: string }>;
-  total: number;
-}) {
-  const gradient = segments
-    .reduce<{ cursor: number; parts: string[] }>(
-      (state, segment) => {
-        const start = state.cursor;
-        const end = start + (segment.value / total) * 100;
-        return {
-          cursor: end,
-          parts: [...state.parts, `${segment.color} ${start}% ${end}%`],
-        };
-      },
-      { cursor: 0, parts: [] },
-    )
-    .parts.join(", ");
-
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-5 text-center">
-      <div
-        aria-label="SDG beneficiary distribution pie chart"
-        className="mx-auto h-52 w-52 rounded-full border border-slate-200"
-        style={{ background: `conic-gradient(${gradient})` }}
-      />
-      <p className="mt-4 text-sm font-semibold text-slate-900">Beneficiary Distribution</p>
-      <p className="mt-1 text-xs text-slate-500">{total.toLocaleString("en-IN")} verified or submitted beneficiaries</p>
-    </div>
-  );
-}
 
 function PageHero({
   actions,
@@ -6357,57 +5604,6 @@ function TextField({
   );
 }
 
-function getCampaign(workspace: Workspace, campaignId: string) {
-  return workspace.campaigns.find((campaign) => campaign.id === campaignId);
-}
-
-function getNgo(workspace: Workspace, ngoId: string) {
-  return workspace.ngos.find((ngo) => ngo.id === ngoId);
-}
-
-function getWorkspaceTotals(workspace: Workspace) {
-  const budget = workspace.campaigns.reduce((sum, campaign) => sum + campaign.budget, 0);
-  const allocated = workspace.campaigns.reduce((sum, campaign) => sum + campaign.allocated, 0);
-  const released = workspace.campaigns.reduce((sum, campaign) => sum + campaign.released, 0);
-  const utilized = workspace.campaigns.reduce((sum, campaign) => sum + campaign.utilized, 0);
-  const pendingRelease = workspace.campaigns.reduce((sum, campaign) => sum + campaign.pendingRelease, 0);
-  const pendingApprovals = workspace.approvals.filter((approval) => approval.status === "Pending").length;
-
-  return {
-    budget,
-    allocated,
-    released,
-    utilized,
-    pendingRelease,
-    pendingApprovals,
-    allocationRate: budget > 0 ? Math.round((allocated / budget) * 100) : 0,
-    releaseRate: budget > 0 ? Math.round((released / budget) * 100) : 0,
-  };
-}
-
-function getExpiryClock(document: NgoPartner["documents"][number]) {
-  if (!document.expiresOn) {
-    return document.status === "Missing" ? "Not received" : "No expiry";
-  }
-
-  const expiresAt = new Date(`${document.expiresOn} 00:00:00`);
-  const today = new Date();
-  const days = Math.ceil((expiresAt.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-
-  if (Number.isNaN(days)) {
-    return document.expiresOn;
-  }
-
-  if (days < 0) {
-    return `${Math.abs(days)} days expired`;
-  }
-
-  if (days <= 30) {
-    return `${days} days left`;
-  }
-
-  return `Valid until ${document.expiresOn}`;
-}
 function PostCsrProjectPage({
   corporate,
   onPosted,

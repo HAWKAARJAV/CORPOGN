@@ -40,6 +40,7 @@ export type NgoCandidate = {
   rating: string;
 };
 
+/** @deprecated Test/demo fixtures only — do not use as a dashboard or API empty-state fallback. */
 export const defaultNgoCandidates: NgoCandidate[] = [
   {
     id: "demo-asha-foundation",

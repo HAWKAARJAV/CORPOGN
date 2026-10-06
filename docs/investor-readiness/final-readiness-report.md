@@ -129,3 +129,107 @@ Rationale: **Critical security holes in admin APIs and secrets exposure were fix
 - `next.config.ts` — turbopack root
 - `tests/*`, `playwright.config.ts` — env + selector updates
 - `app/ngo/.../ngo-dashboard.tsx` — `sidebar-role-label` test id
+
+---
+
+## Appendix — Enterprise investor pass (2026-10-07)
+
+### Approach
+
+Non-destructive: preserve Next.js + Supabase + 49 APIs + 14-module workspace. Improve **coherence**, **seeded demo narrative**, and **dashboard data binding** — not a rewrite.
+
+### What was already strong
+
+- Project workspace API with module-level permissions
+- Corporate `workspace-overview` aggregating real module tables
+- NGO role architecture (7 roles)
+- Admin matchmaker / pre-assignment / activate flow
+- Honest AI split (LLM vs heuristics) documented in `docs/PLATFORM_PRODUCT_GUIDE.md`
+
+### Implemented this pass
+
+| Item | Detail |
+|------|--------|
+| `npm run seed:demo` | `tooling/scripts/seed-investor-demo.mjs` — Sorting Tax Advisory + SEE Foundation + flagship signed project + all 14 modules + reconciled finance/M&E |
+| Demo script | `docs/investor-readiness/demo-script.md` |
+| Corporate dashboard | Treat signed projects from `workspace-overview` as “has portfolio”; priority queue includes real pending approvals |
+| Render build | `tailwindcss` + `@tailwindcss/postcss` moved to `dependencies` for production install |
+
+### RBAC / UX (2026-10-07 follow-up)
+
+| Area | Status |
+|------|--------|
+| Corporate employee landing | `CorporateRoleHomeSection` on Dashboard — role inferred from `position` + `allowed_pages`; metric labels and CSR posting table visibility differ by Finance / Compliance / CSR / Executive |
+| NGO role home queues | `NgoRoleWorkQueue` on each role’s default sidebar section — live counts from `/api/project-workspace/:id/:module` |
+| Campaign vs project copy | Dashboard portfolio table uses “Project”; Campaign Management remains the per-program workspace UI |
+| Empty NGO/corporate states | No fake NGO directory or fund tranches; run `npm run seed:demo` before investor walkthrough |
+
+### Security / RLS
+
+- **Added:** `supabase/sql/workspace-rls-tenant-scoped.sql` — tenant-scoped SELECT on `project_workspaces`, `activity_logs`, and 14 module tables via `user_can_access_workspace_project()`. Apply on Supabase; APIs remain primary enforcement (`supabaseAdmin`).
+- Continue IDOR review on `project_connections`, storage signed URLs, and employee `allowed_pages` vs API enforcement.
+
+### Investor demo flow
+
+See `docs/investor-readiness/demo-script.md`. Definition of done for demo: run `seed:demo`, walk corporate → NGO profile → workspace → role switch → admin.
+
+### Verdict (this pass)
+
+**DEMO-READY WITH PREP** — Run `seed:demo` + apply `milestones-progress.sql` and `workspace-rls-tenant-scoped.sql` on the target Supabase project before investor meetings. Production deploy must include Tailwind production deps and latest `main`. Lint/E2E/responsive pass tracked below.
+
+### Quality gates (2026-10-07)
+
+| Gate | Result |
+|------|--------|
+| `npm run build` | See commit / CI output |
+| `npm run lint` | Targeted fixes on touched dashboards; full-repo ESLint debt may remain |
+| `npm run test:e2e` | Run after deploy; fix spec drift if dashboards change |
+| Responsive (1024/768) | `min-w-0` + table `overflow-x-auto` on corporate/NGO main shells |
+
+---
+
+## Data Architecture & Source of Truth
+
+### Principle
+
+**Seed once → Supabase → existing `/api` routes → UI.** No business KPIs invented in React state. API failures show empty/error — not silent numeric fallbacks.
+
+### Shared project flow
+
+```
+Corporate UI ──GET/PATCH──► /api/project-workspace/:projectId/:module ──► Supabase (14 module tables)
+NGO UI       ──GET/PATCH──► same routes (authorizeProjectAccess + module permissions)
+Corporate portfolio ──GET──► /api/corporates/workspace-overview ──► aggregates module rows for signed projects
+```
+
+### Example mutation (investor demo)
+
+1. NGO ops: **Milestone Reporting** → adjust **Digital learning rollout** progress → **Save** (`PATCH …/milestones`).
+2. Corporate: **Campaign Management** → **Milestones** tab (or reload dashboard) → same `%` from database.
+
+Requires `supabase/sql/milestones-progress.sql` applied once on the project database.
+
+### Entity map (canonical)
+
+| Entity | DB source | Read API | Mutation API |
+|--------|-----------|----------|--------------|
+| Signed project | `opportunities` + `project_workspaces` | `workspace-overview`, per-module GET | publish/activate flows (existing) |
+| Milestones | `milestones` | `project-workspace/.../milestones` | `PATCH` same route |
+| Funds / budget | `funds`, `budget_tracking` | module GET + `workspace-overview` | `POST` / `PATCH` (budget) |
+| M&E / impact | `monitoring_evaluation` | module GET + `workspace-overview` | `POST` / `PATCH` |
+| Approvals | `approvals` | `workspace-overview` | `POST` module; corporate `PATCH` `/api/corporates/workspace-approvals/:id` |
+| Activity | `activity_logs` | `workspace-overview` | written on module POST/PATCH |
+| NGO compliance docs | `ngo_documents` + storage | NGO/compliance APIs | NGO upload flows |
+| Trust score | `ngos` + trust engine fields | full-profile, discover | enrichment/batch (not UI constants) |
+
+### Removed / reduced anti-patterns (2026-10-07)
+
+- `defaultNgoCandidates` no longer used as API/dashboard fallback when DB is empty.
+- Corporate dashboard portfolio table + activity feed use `workspace-overview`, not client `Workspace.campaigns`.
+- Notifications page lists real pending approvals + activity log.
+- NGO fund tracking + milestone reporting read/write workspace modules.
+- Impact AI draft KPIs pulled from `monitoring_evaluation` when `projectId` is set.
+
+### Remaining client `Workspace` state
+
+**Addressed (2026-10-07):** Removed the React-only `Workspace` object (mock campaigns, approvals, reports, issues). Corporate portfolio pages read `/api/corporates/workspace-overview`; demo mutations go through `/api/project-workspace/:projectId/:module` and `/api/corporates/workspace-approvals/:id`. Support chat no longer renders fabricated issue threads.

@@ -1,10 +1,10 @@
 import type { NextConfig } from "next";
 import path from "path";
-import { fileURLToPath } from "url";
 
-const projectRoot = path.dirname(fileURLToPath(import.meta.url));
+const projectRoot = path.resolve(process.cwd());
 
 const nextConfig: NextConfig = {
+  outputFileTracingRoot: projectRoot,
   turbopack: {
     root: projectRoot,
   },
