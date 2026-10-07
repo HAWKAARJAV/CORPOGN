@@ -63,6 +63,8 @@ function toProposalShape(row: Record<string, unknown>, opp: Record<string, unkno
     // knows proposal/pending_admin/active/completed, so this rides alongside
     // rather than replacing it. Step 7: shortlisted = pre-signed discussion.
     isShortlisted: row.status === "shortlisted",
+    corporateConfirmedAt: row.corporate_confirmed_at ? String(row.corporate_confirmed_at) : null,
+    ngoConfirmedAt: row.ngo_confirmed_at ? String(row.ngo_confirmed_at) : null,
     progress: 0,
     milestone: row.status === "shortlisted" ? "Shortlisted — in discussion" : "Application submitted",
     document_requests: [] as string[],

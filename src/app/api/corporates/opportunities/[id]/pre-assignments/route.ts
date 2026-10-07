@@ -71,6 +71,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       logoUrl: live?.logo_url ?? null,
       hasFullProfile: Boolean(row.ngo_id), // full-profile page needs a live ngos.id
       createdAt: row.created_at,
+      corporateConfirmedAt: row.corporate_confirmed_at ?? null,
+      ngoConfirmedAt: row.ngo_confirmed_at ?? null,
+      activatedAt: row.activated_at ?? null,
     };
   });
 

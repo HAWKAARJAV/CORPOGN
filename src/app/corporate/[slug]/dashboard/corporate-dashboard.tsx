@@ -1293,6 +1293,9 @@ type PreAssignmentCandidate = {
   certificationTier: string | null;
   trustScore: number | null;
   hasFullProfile: boolean;
+  corporateConfirmedAt: string | null;
+  ngoConfirmedAt: string | null;
+  activatedAt: string | null;
 };
 
 function CandidateCard({
@@ -1300,15 +1303,19 @@ function CandidateCard({
   corporateSlug,
   showScore,
   onShortlist,
+  onConfirm,
   onMessage,
   isShortlisting,
+  isConfirming,
 }: {
   candidate: PreAssignmentCandidate;
   corporateSlug: string;
   showScore: boolean;
   onShortlist: () => void;
+  onConfirm: () => void;
   onMessage: () => void;
   isShortlisting: boolean;
+  isConfirming: boolean;
 }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4">
@@ -1322,7 +1329,20 @@ function CandidateCard({
             {candidate.status === "shortlisted" ? (
               <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Shortlisted</span>
             ) : null}
+            {candidate.corporateConfirmedAt ? (
+              <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">You confirmed</span>
+            ) : null}
           </div>
+          {candidate.status === "shortlisted" ? (
+            <p className="mt-2 flex flex-wrap gap-2 text-[10px] font-semibold">
+              <span className={candidate.corporateConfirmedAt ? "text-emerald-600" : "text-amber-600"}>
+                Corporate {candidate.corporateConfirmedAt ? "✓" : "pending"}
+              </span>
+              <span className={candidate.ngoConfirmedAt ? "text-emerald-600" : "text-amber-600"}>
+                NGO {candidate.ngoConfirmedAt ? "✓" : "pending"}
+              </span>
+            </p>
+          ) : null}
           <p className="mt-1 text-xs text-slate-500">
             {[candidate.ngoCity, candidate.ngoState].filter(Boolean).join(", ") || "Location unknown"}
             {showScore ? ` · Match score ${candidate.matchScore}/100${candidate.wasInTop10 ? " (top 10)" : ""}` : ""}
@@ -1365,7 +1385,25 @@ function CandidateCard({
                 {isShortlisting ? "..." : "Shortlist"}
               </button>
             ) : null}
+            {candidate.status === "shortlisted" && !candidate.corporateConfirmedAt ? (
+              <button
+                onClick={onConfirm}
+                disabled={isConfirming}
+                className="rounded-lg border border-emerald-600 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                type="button"
+              >
+                {isConfirming ? "Confirming…" : "Confirm partnership"}
+              </button>
+            ) : null}
           </div>
+          {candidate.status === "shortlisted" &&
+          candidate.corporateConfirmedAt &&
+          candidate.ngoConfirmedAt &&
+          !candidate.activatedAt ? (
+            <p className="max-w-xs text-right text-[10px] leading-snug text-slate-500">
+              Both sides confirmed. A platform admin must Activate in Admin → Matchmaker.
+            </p>
+          ) : null}
         </div>
       </div>
     </div>
@@ -1788,6 +1826,8 @@ function ApplicantsAndSuggestions({ opportunityId, corporateSlug }: { opportunit
   const [adminSuggested, setAdminSuggested] = useState<PreAssignmentCandidate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [shortlistingId, setShortlistingId] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState("");
   const [messageTarget, setMessageTarget] = useState<{ id: string; name: string } | null>(null);
 
   async function load() {
@@ -1811,17 +1851,45 @@ function ApplicantsAndSuggestions({ opportunityId, corporateSlug }: { opportunit
 
   async function shortlist(id: string) {
     setShortlistingId(id);
+    setActionError("");
     try {
       const { data: sessionData } = await supabaseBrowser.auth.getSession();
       const token = sessionData.session?.access_token;
-      await fetch(`/api/corporates/opportunities/${opportunityId}/pre-assignments`, {
+      const res = await fetch(`/api/corporates/opportunities/${opportunityId}/pre-assignments`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ pre_assignment_id: id, status: "shortlisted" }),
       });
+      const body = await res.json();
+      if (!res.ok) {
+        setActionError(body.error ?? "Could not shortlist applicant.");
+        return;
+      }
       await load();
     } finally {
       setShortlistingId(null);
+    }
+  }
+
+  async function confirmPartnership(id: string) {
+    setConfirmingId(id);
+    setActionError("");
+    try {
+      const { data: sessionData } = await supabaseBrowser.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const res = await fetch(`/api/corporates/opportunities/${opportunityId}/pre-assignments`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ pre_assignment_id: id, action: "confirm" }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setActionError(body.error ?? "Could not confirm partnership.");
+        return;
+      }
+      await load();
+    } finally {
+      setConfirmingId(null);
     }
   }
 
@@ -1831,6 +1899,11 @@ function ApplicantsAndSuggestions({ opportunityId, corporateSlug }: { opportunit
 
   return (
     <div className="mt-5 space-y-5 border-t border-slate-100 pt-4">
+      {actionError ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+          {actionError}
+        </div>
+      ) : null}
       {/* Path (a): NGO-initiated applications — kept visibly separate from admin suggestions */}
       <div>
         <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-400">Applicants ({applicants.length})</p>
@@ -1843,8 +1916,10 @@ function ApplicantsAndSuggestions({ opportunityId, corporateSlug }: { opportunit
                 corporateSlug={corporateSlug}
                 showScore={false}
                 onShortlist={() => shortlist(c.id)}
+                onConfirm={() => confirmPartnership(c.id)}
                 onMessage={() => setMessageTarget({ id: c.id, name: c.ngoName })}
                 isShortlisting={shortlistingId === c.id}
+                isConfirming={confirmingId === c.id}
               />
             ))}
           </div>
@@ -1867,8 +1942,10 @@ function ApplicantsAndSuggestions({ opportunityId, corporateSlug }: { opportunit
                 corporateSlug={corporateSlug}
                 showScore
                 onShortlist={() => shortlist(c.id)}
+                onConfirm={() => confirmPartnership(c.id)}
                 onMessage={() => setMessageTarget({ id: c.id, name: c.ngoName })}
                 isShortlisting={shortlistingId === c.id}
+                isConfirming={confirmingId === c.id}
               />
             ))}
           </div>

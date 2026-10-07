@@ -2368,6 +2368,8 @@ interface Proposal {
   opportunity_id?: string | null;
   lifecycle_status?: string | null;
   isShortlisted?: boolean;
+  corporateConfirmedAt?: string | null;
+  ngoConfirmedAt?: string | null;
 }
 
 type NgoPreAssignmentMeeting = {
@@ -3009,6 +3011,7 @@ function ProposalsSection({
   const [toast, setToast] = useState("");
   const [expandedWorkspaceId, setExpandedWorkspaceId] = useState<string | null>(null);
   const [messageTarget, setMessageTarget] = useState<{ id: string; corporateName: string } | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   async function loadData() {
     try {
@@ -3107,6 +3110,30 @@ function ProposalsSection({
     }
   };
 
+  async function confirmPartnership(preAssignmentId: string) {
+    setConfirmingId(preAssignmentId);
+    setError("");
+    try {
+      const res = await fetch("/api/ngo/proposals", {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ pre_assignment_id: preAssignmentId, action: "confirm" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not confirm partnership.");
+      await loadData();
+      setToast("✓ Partnership confirmed on your side.");
+      setTimeout(() => setToast(""), 3500);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Could not confirm partnership.");
+    } finally {
+      setConfirmingId(null);
+    }
+  }
+
   const total = proposals.length;
   const pending = proposals.filter((p) => p.status === "proposal").length;
   const approved = proposals.filter((p) => p.status === "active" || p.status === "completed").length;
@@ -3168,6 +3195,7 @@ function ProposalsSection({
                       <th className="px-6 py-4">Requested Budget</th>
                       <th className="px-6 py-4">Submitted Date</th>
                       <th className="px-6 py-4">Status</th>
+                      <th className="px-6 py-4">Partnership</th>
                       <th className="px-6 py-4">Contact</th>
                       <th className="px-6 py-4">Workspace</th>
                     </tr>
@@ -3204,14 +3232,50 @@ function ProposalsSection({
                               ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
                               : prop.status === "pending_admin"
                                 ? "bg-blue-50 text-blue-700 border border-blue-100"
+                              : prop.isShortlisted
+                                ? "bg-violet-50 text-violet-700 border border-violet-100"
                               : "bg-amber-50 text-amber-700 border border-amber-100"
                             }`}>
                             {prop.status === "active" || prop.status === "completed"
                               ? "Approved"
                               : prop.status === "pending_admin"
                                 ? "Awaiting Admin"
+                                : prop.isShortlisted
+                                  ? "Shortlisted"
                                 : "Pending Review"}
                           </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          {prop.isShortlisted ? (
+                            <div className="space-y-2">
+                              <div className="flex flex-wrap gap-2 text-[10px] font-semibold">
+                                <span className={prop.corporateConfirmedAt ? "text-emerald-600" : "text-amber-600"}>
+                                  Corporate {prop.corporateConfirmedAt ? "✓" : "pending"}
+                                </span>
+                                <span className={prop.ngoConfirmedAt ? "text-emerald-600" : "text-amber-600"}>
+                                  NGO {prop.ngoConfirmedAt ? "✓" : "pending"}
+                                </span>
+                              </div>
+                              {!prop.ngoConfirmedAt ? (
+                                <button
+                                  type="button"
+                                  onClick={() => confirmPartnership(prop.id)}
+                                  disabled={confirmingId === prop.id}
+                                  className="rounded-lg border border-emerald-600 bg-white px-2.5 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                                >
+                                  {confirmingId === prop.id ? "Confirming…" : "Confirm partnership"}
+                                </button>
+                              ) : prop.corporateConfirmedAt ? (
+                                <p className="max-w-[14rem] text-[10px] leading-snug text-slate-500">
+                                  Both confirmed. Platform admin must Activate in Admin → Matchmaker.
+                                </p>
+                              ) : (
+                                <p className="text-[10px] text-slate-500">Waiting for corporate confirmation.</p>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-300">—</span>
+                          )}
                         </td>
                         <td className="px-6 py-4">
                           <button
@@ -3238,7 +3302,7 @@ function ProposalsSection({
                       </tr>
                       {expandedWorkspaceId === prop.id && prop.opportunity_id ? (
                         <tr>
-                          <td colSpan={8} className="bg-slate-50/50 px-6 py-4">
+                          <td colSpan={9} className="bg-slate-50/50 px-6 py-4">
                             <NgoWorkspaceModulesPanel projectId={prop.opportunity_id} token={token} />
                           </td>
                         </tr>
