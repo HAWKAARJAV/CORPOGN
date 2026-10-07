@@ -720,9 +720,12 @@ export function CorporateDashboard({ slug }: { slug: string }) {
     }
   }
 
-  function openProjectWorkspace() {
+  function openProjectWorkspace(connection?: ProjectConnection) {
     setIsProjectWorkspaceOpen(true);
     setActiveItem("Dashboard");
+    if (connection?.ngo_id) {
+      setActiveNgoId(connection.ngo_id);
+    }
   }
 
   function closeProjectWorkspace() {
@@ -1366,6 +1369,34 @@ type PreAssignmentCandidate = {
   ngoConfirmedAt: string | null;
   activatedAt: string | null;
 };
+
+function opportunityBundleFor(
+  portfolio: PreAssignmentPortfolio | null,
+  opportunityId: string,
+): PreAssignmentOpportunityBundle | undefined {
+  return portfolio?.byOpportunity.find((item) => item.opportunityId === opportunityId);
+}
+
+function opportunityLifecycleIsSigned(
+  opp: CsrOpportunity,
+  bundle?: PreAssignmentOpportunityBundle,
+): boolean {
+  const fromOpp = opp.lifecycle_status?.toLowerCase();
+  const fromPortfolio = bundle?.lifecycleStatus?.toLowerCase();
+  return fromOpp === "signed" || fromPortfolio === "signed";
+}
+
+/** Activated NGO partner — applicants win over admin suggestions when both exist. */
+function activatedPartnerForOpportunity(
+  portfolio: PreAssignmentPortfolio | null,
+  opportunityId: string,
+): PreAssignmentCandidate | undefined {
+  const bundle = opportunityBundleFor(portfolio, opportunityId);
+  if (!bundle) return undefined;
+  const fromApplicant = bundle.applicants.find((candidate) => candidate.activatedAt);
+  if (fromApplicant) return fromApplicant;
+  return bundle.adminSuggested.find((candidate) => candidate.activatedAt);
+}
 
 function CandidateCard({
   candidate,
@@ -2098,15 +2129,6 @@ function RecommendedPreAssignmentList({
   );
 }
 
-function activatedPartnerForOpportunity(
-  portfolio: PreAssignmentPortfolio | null,
-  opportunityId: string,
-): PreAssignmentCandidate | undefined {
-  const bundle = portfolio?.byOpportunity.find((item) => item.opportunityId === opportunityId);
-  const candidates = [...(bundle?.applicants ?? []), ...(bundle?.adminSuggested ?? [])];
-  return candidates.find((candidate) => candidate.activatedAt);
-}
-
 function MyProjectsPage({
   navigateTo,
   onReviewProposal,
@@ -2119,7 +2141,7 @@ function MyProjectsPage({
 }: {
   navigateTo: (destination: Destination) => void;
   onReviewProposal: (prop: ProjectConnection, opp: CsrOpportunity) => void;
-  onOpenWorkspace: (connection: ProjectConnection) => void;
+  onOpenWorkspace: (connection?: ProjectConnection) => void;
   postedOpportunities: CsrOpportunity[];
   projectConnections: ProjectConnection[];
   onPublished: (updated: CsrOpportunity) => void;
@@ -2166,11 +2188,13 @@ function MyProjectsPage({
     preAssignmentPortfolio?.totals.applicants ??
     proposals.length;
   const totalAdminSuggested = preAssignmentPortfolio?.totals.adminSuggested ?? 0;
-  const signedOpportunityCount = postedOpportunities.filter(
-    (opp) =>
-      opp.lifecycle_status === "signed" &&
-      !activeByProjectName.has(opp.title.toLowerCase()),
-  ).length;
+  const signedOpportunityCount = postedOpportunities.filter((opp) => {
+    const bundle = opportunityBundleFor(preAssignmentPortfolio, opp.id);
+    return (
+      opportunityLifecycleIsSigned(opp, bundle) &&
+      !activeByProjectName.has(opp.title.toLowerCase())
+    );
+  }).length;
   const totalActive = activeConnections.length + signedOpportunityCount;
 
   if (!totalPosted && !totalApplicants && !totalActive) {
@@ -2239,14 +2263,14 @@ function MyProjectsPage({
       <div className="space-y-4">
         {postedOpportunities.map((opp) => {
           const applicants = getApplicantsForOpportunity(opp.title);
+          const bundle = opportunityBundleFor(preAssignmentPortfolio, opp.id);
           const assignedConnection = activeByProjectName.get(opp.title.toLowerCase());
           const activatedPartner = assignedConnection
             ? undefined
             : activatedPartnerForOpportunity(preAssignmentPortfolio, opp.id);
+          const lifecycleSigned = opportunityLifecycleIsSigned(opp, bundle);
           const isAssigned =
-            Boolean(assignedConnection) ||
-            opp.lifecycle_status === "signed" ||
-            Boolean(activatedPartner);
+            Boolean(assignedConnection) || lifecycleSigned || Boolean(activatedPartner);
           const assignedNgoName =
             assignedConnection?.ngo_name ?? activatedPartner?.ngoName ?? "Partner NGO";
           const statusLabel = assignedConnection
@@ -2266,7 +2290,7 @@ function MyProjectsPage({
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-lg font-bold tracking-tight text-slate-900">{opp.title}</h3>
                     <ProjectStatusPill status={statusLabel} />
-                    {opp.lifecycle_status ? (
+                    {opp.lifecycle_status && !isAssigned ? (
                       <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                         {opp.lifecycle_status.replace("_", "-")}
                       </span>
@@ -2294,8 +2318,12 @@ function MyProjectsPage({
                   <button
                     className="inline-flex shrink-0 flex-col items-end gap-0.5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
                     onClick={() => {
-                      if (assignedConnection) onOpenWorkspace(assignedConnection);
-                      else navigateTo("Dashboard");
+                      if (assignedConnection) {
+                        onOpenWorkspace(assignedConnection);
+                        return;
+                      }
+                      setExpandedWorkspaceId(opp.id);
+                      onOpenWorkspace();
                     }}
                     type="button"
                     title="Document requests and partner progress updates"
@@ -2317,7 +2345,7 @@ function MyProjectsPage({
                 </div>
               )}
 
-              {opp.lifecycle_status === "signed" ? (
+              {isAssigned ? (
                 <div className="mt-4 border-t border-slate-100 pt-4">
                   <button
                     type="button"
