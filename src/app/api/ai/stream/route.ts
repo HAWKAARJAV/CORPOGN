@@ -4,7 +4,12 @@ import {
   type AiStreamContext,
   type AiStreamTask,
 } from "@/lib/llm-task-prompts";
-import { localFallbackReply, pickLlmProvider, streamChat } from "@/lib/llm-stream";
+import {
+  llmConfigStatus,
+  localFallbackReply,
+  pickLlmProvider,
+  streamChat,
+} from "@/lib/llm-stream";
 
 export const runtime = "nodejs";
 
@@ -66,10 +71,15 @@ export async function POST(request: Request) {
       let full = "";
 
       try {
-        const result = await streamChat(messages, (delta) => {
-          full += delta;
-          send({ type: "delta", text: delta });
-        });
+        const rejectDegenerate = task === "impact_report";
+        const result = await streamChat(
+          messages,
+          (delta) => {
+            full += delta;
+            send({ type: "delta", text: delta });
+          },
+          { rejectDegenerate },
+        );
 
         if (!full.trim()) {
           const hint =
@@ -78,7 +88,28 @@ export async function POST(request: Request) {
               : task === "impact_report"
                 ? "impact metrics and project notes"
                 : context.section ?? "dashboard";
-          const offline = localFallbackReply(task.replace("_", " "), hint);
+          const config = llmConfigStatus();
+          let offline = localFallbackReply(task.replace("_", " "), hint);
+          if (config.hasAnyKey && result.degenerate) {
+            offline = `**CorpoGN AI could not produce a clean impact report**
+
+The configured LLM returned repetitive table filler instead of narrative text (often when M&E metrics are empty or the model misbehaves). We tried other providers when keys were available.
+
+**Configured providers:** ${config.providers.join(", ") || "none"}
+
+**What to do:**
+- Add or prioritize \`GROQ_API_KEY\` on Render for a reliable fallback.
+- Ask partner NGOs to log Monitoring & Evaluation metrics in each signed project workspace.
+- Retry after metrics exist or switch \`OPENROUTER_MODEL\` (e.g. \`google/gemini-2.0-flash-001\`).
+
+**Context seen:** ${hint}`;
+          } else if (!config.hasAnyKey) {
+            send({
+              type: "error",
+              message:
+                "No LLM API keys on the server. Set GROQ_API_KEY, OPENROUTER_API_KEY, or GEMINI_API_KEY in Render.",
+            });
+          }
           full = offline;
           send({ type: "delta", text: offline });
           send({ type: "done", provider: "local", streamed: false });

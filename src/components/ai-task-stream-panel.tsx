@@ -7,6 +7,7 @@ import { consumeAiStream } from "@/lib/ai-stream-client";
 import { supabaseBrowser } from "@/lib/supabase-browser";
 import type { AiPortal } from "@/lib/llm-task-prompts";
 import type { AiStreamTask } from "@/lib/llm-task-prompts";
+import { sanitizeStreamDisplayText } from "@/lib/llm-stream-output";
 
 type AiTaskStreamPanelProps = {
   title: string;
@@ -70,8 +71,10 @@ export function AiTaskStreamPanel({
         message: extraInstructions,
         payload,
         onMeta: (m) => setProvider(m.provider ?? null),
-        onDelta: (text) => setOutput((prev) => prev + text),
+        onDelta: (text) =>
+          setOutput((prev) => sanitizeStreamDisplayText(prev + text)),
         onError: (msg) => setError(msg),
+        onDone: () => setOutput((prev) => sanitizeStreamDisplayText(prev)),
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Generation failed.");

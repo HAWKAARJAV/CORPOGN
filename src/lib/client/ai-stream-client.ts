@@ -16,6 +16,7 @@ export type AiStreamOptions = {
   onDelta: (text: string) => void;
   onDone?: (info: { provider?: string; streamed?: boolean }) => void;
   onError?: (message: string) => void;
+  onReset?: () => void;
 };
 
 export async function consumeAiStream(opts: AiStreamOptions): Promise<void> {
@@ -69,6 +70,10 @@ export async function consumeAiStream(opts: AiStreamOptions): Promise<void> {
           streamed?: boolean;
         };
         if (json.type === "meta") opts.onMeta?.({ provider: json.provider, task: json.task });
+        if (json.type === "reset") {
+          opts.onReset?.();
+          continue;
+        }
         if (json.type === "delta" && json.text) opts.onDelta(json.text);
         if (json.type === "done") opts.onDone?.({ provider: json.provider, streamed: json.streamed });
         if (json.type === "error") opts.onError?.(json.message ?? "Stream error");
