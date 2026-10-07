@@ -1101,6 +1101,11 @@ exception
 end;
 $$;
 
+-- Workspace milestones: progress % (required for milestone PATCH in project workspace UI)
+alter table public.milestones
+  add column if not exists progress integer not null default 0
+    check (progress >= 0 and progress <= 100);
+
 -- ─────────────────────────────────────────────────────────────────
 -- DONE.
 -- ─────────────────────────────────────────────────────────────────

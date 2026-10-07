@@ -170,7 +170,11 @@ export function WorkspaceMilestonesPanel({
                     <button
                       type="button"
                       disabled={savingId === row.id}
-                      onClick={() => saveProgress(row, progress)}
+                      onClick={() => {
+                        const latest = items.find((m) => m.id === row.id);
+                        const p = typeof latest?.progress === "number" ? latest.progress : progress;
+                        void saveProgress(latest ?? row, p);
+                      }}
                       className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
                     >
                       {savingId === row.id ? "Saving…" : "Save"}
