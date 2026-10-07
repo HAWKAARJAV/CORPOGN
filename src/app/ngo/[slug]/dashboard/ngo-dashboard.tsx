@@ -122,11 +122,11 @@ const ALL_SIDEBAR_ITEMS: SidebarItem[] = [
 const ROLE_SIDEBAR_IDS: Record<Exclude<NgoRole, "super_admin">, { base: string[]; withProject: string[] }> = {
   finance_officer: {
     base: ["funds", "expenses", "invoices", "utilization-reports", "grant-tracking", "finance-analytics"],
-    withProject: ["fund-tracking", "utilization-cert"],
+    withProject: ["fund-tracking"],
   },
   compliance_officer: {
     base: ["compliance-vault", "legal-documents", "ngo-verification", "audit-requests", "compliance-workflow"],
-    withProject: ["utilization-cert"],
+    withProject: [],
   },
   operations_manager: {
     base: ["projects", "milestones", "beneficiary-tracking", "task-assignment", "partnership-communication", "report-drafts"],
@@ -165,8 +165,8 @@ const SIDEBAR_GROUPS = [
   { label: "Finance", ids: ["funds", "expenses", "invoices", "utilization-reports", "grant-tracking", "finance-analytics"] },
   { label: "Operations", ids: ["projects", "milestones", "beneficiary-tracking", "task-assignment", "partnership-communication", "report-drafts"] },
   { label: "Field Work", ids: ["assigned-projects", "beneficiary-forms", "field-updates", "media-uploads", "attendance", "assigned-tasks", "event-participation", "uploads"] },
-  { label: "Project Work", ids: ["my-projects", "project-chat", "fund-tracking", "milestone-reporting", "impact-reporting", "utilization-cert"] },
-  { label: "Reporting", ids: ["impact-reports", "media-library", "analytics-view", "presentations", "reports", "audit-logs"] },
+  { label: "Project Work", ids: ["my-projects", "project-chat", "fund-tracking", "milestone-reporting", "impact-reporting"] },
+  { label: "Reporting", ids: ["impact-reports", "media-library", "analytics-view", "presentations", "audit-logs"] },
   { label: "Team & Admin", ids: ["team-management", "settings"] },
 ];
 
@@ -5797,7 +5797,7 @@ export default function NgoDashboard({
   function getSidebarItems(): SidebarItem[] {
     if (viewerRole === "super_admin") {
       // Super admin sees everything (superAdminOnly + shared items)
-      return ALL_SIDEBAR_ITEMS.filter((i) => !i.id.startsWith("assigned-") && !["funds", "expenses", "invoices", "utilization-reports", "grant-tracking", "finance-analytics", "legal-documents", "ngo-verification", "audit-requests", "compliance-workflow", "projects", "milestones", "beneficiary-tracking", "task-assignment", "partnership-communication", "report-drafts", "beneficiary-forms", "field-updates", "media-uploads", "attendance", "impact-reports", "media-library", "analytics-view", "presentations", "assigned-tasks", "event-participation", "uploads"].includes(i.id));
+      return ALL_SIDEBAR_ITEMS.filter((i) => !i.id.startsWith("assigned-") && !["funds", "expenses", "invoices", "utilization-reports", "grant-tracking", "finance-analytics", "legal-documents", "ngo-verification", "audit-requests", "compliance-workflow", "projects", "milestones", "beneficiary-tracking", "task-assignment", "partnership-communication", "report-drafts", "beneficiary-forms", "field-updates", "media-uploads", "attendance", "impact-reports", "media-library", "analytics-view", "presentations", "assigned-tasks", "event-participation", "uploads", "utilization-cert", "reports"].includes(i.id));
     }
     const cfg = ROLE_SIDEBAR_IDS[viewerRole as Exclude<NgoRole, "super_admin">];
     if (!cfg) return [];

@@ -38,8 +38,8 @@ test.describe("Finance Officer sidebar", () => {
   test("sees nav-fund-tracking", async ({ page }) => {
     await expect(page.getByTestId("nav-fund-tracking")).toBeVisible();
   });
-  test("sees nav-utilization-cert", async ({ page }) => {
-    await expect(page.getByTestId("nav-utilization-cert")).toBeVisible();
+  test("does NOT see nav-utilization-cert", async ({ page }) => {
+    await expect(page.getByTestId("nav-utilization-cert")).not.toBeVisible();
   });
   test("does NOT see nav-command-center", async ({ page }) => {
     await expect(page.getByTestId("nav-command-center")).not.toBeVisible();
@@ -57,10 +57,6 @@ test.describe("Finance Officer sidebar", () => {
     await page.getByTestId("nav-fund-tracking").click();
     await expect(page.getByRole("heading", { name: "Fund Tracking" })).toBeVisible();
   });
-  test("Utilization Certificate section renders", async ({ page }) => {
-    await page.getByTestId("nav-utilization-cert").click();
-    await expect(page.getByRole("heading", { name: "Utilization Certificate" })).toBeVisible();
-  });
 });
 
 // ── Compliance Officer ───────────────────────────────────────────────────────
@@ -71,8 +67,8 @@ test.describe("Compliance Officer sidebar", () => {
   test("sees nav-compliance-vault", async ({ page }) => {
     await expect(page.getByTestId("nav-compliance-vault")).toBeVisible();
   });
-  test("sees nav-utilization-cert", async ({ page }) => {
-    await expect(page.getByTestId("nav-utilization-cert")).toBeVisible();
+  test("does NOT see nav-utilization-cert", async ({ page }) => {
+    await expect(page.getByTestId("nav-utilization-cert")).not.toBeVisible();
   });
   test("does NOT see nav-command-center", async ({ page }) => {
     await expect(page.getByTestId("nav-command-center")).not.toBeVisible();
