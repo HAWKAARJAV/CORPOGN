@@ -1534,9 +1534,11 @@ interface Opportunity {
   min_trust_score?: number;
   created_at: string;
   corporate_name: string;
-  ai_fit_score?: number;
-  ai_fit_label?: string;
-  ai_insight?: string;
+  match_score?: number | null;
+  fit_label?: string | null;
+  fit_insight?: string | null;
+  matched_criteria?: Record<string, unknown> | null;
+  scoring_source?: string | null;
 }
 
 function getSdgInfo(focusArea: string) {
@@ -1875,11 +1877,11 @@ function OpportunitiesSection({
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <AiAssistBadge label="AI match scores" variant="emerald" />
+            <AiAssistBadge label="Match scores" variant="emerald" />
           </div>
           <SectionHeader
             title="Opportunities"
-            sub="Browse open CSR funding programs. CorpoGN AI scores each brief against your trust profile before you apply."
+            sub="Browse open CSR funding programs. Each brief is ranked by the same rule-based match model used in corporate matchmaking."
           />
           <p className="mt-1 max-w-2xl text-xs text-slate-500">{AI_PRODUCT_COPY.discovery}</p>
         </div>
@@ -1961,15 +1963,18 @@ function OpportunitiesSection({
                   </div>
                   <h3 className="text-lg font-bold text-slate-900 tracking-tight">{opp.title}</h3>
                   <p className="text-xs font-semibold text-slate-400 mt-1">Funder: {opp.corporate_name}</p>
-                  {typeof opp.ai_fit_score === "number" ? (
+                  {typeof opp.match_score === "number" ? (
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <span className="rounded-full bg-violet-50 px-2.5 py-0.5 text-[10px] font-bold text-violet-800">
-                        AI fit {opp.ai_fit_score}% · {opp.ai_fit_label ?? "Match"}
+                        Match {opp.match_score}/100 · {opp.fit_label ?? "Scored"}
                       </span>
+                      {opp.scoring_source === "match_engine" ? (
+                        <span className="text-[10px] font-medium text-slate-400">Enriched profile</span>
+                      ) : null}
                     </div>
                   ) : null}
-                  {opp.ai_insight ? (
-                    <AiInsightLine text={opp.ai_insight} className="mt-2 text-violet-600/90" />
+                  {opp.fit_insight ? (
+                    <AiInsightLine text={opp.fit_insight} className="mt-2 text-violet-600/90" />
                   ) : null}
                   <p className="text-sm text-slate-600 mt-3 line-clamp-3">{opp.description}</p>
                 </div>

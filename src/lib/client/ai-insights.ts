@@ -1,6 +1,6 @@
 /**
- * Lightweight, explainable AI-style signals for investor demos.
- * Uses live trust/eligibility data — not a black-box LLM call on every list view.
+ * Lightweight client-side copy helpers. NGO opportunity match scores are computed
+ * server-side in `/api/ngo/opportunities` (see ngo-opportunity-fit.mjs).
  */
 
 export type OpportunityFit = {

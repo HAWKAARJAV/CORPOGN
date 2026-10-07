@@ -1,5 +1,10 @@
 import { getCaller, getNgoIdForUser } from "@/lib/access-control";
-import { opportunityFitForNgo } from "@/lib/ai-insights";
+import {
+  computeNgoOpportunityFit,
+  loadDiscoveredEngineContextForNgo,
+  loadNgoProfileForMatch,
+  type NgoProfileForMatch,
+} from "@/lib/server/ngo-opportunity-match";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 type OpportunityRow = {
@@ -8,6 +13,7 @@ type OpportunityRow = {
   title: string;
   description: string | null;
   focus_area: string;
+  csr_focus_area?: string | null;
   budget: number | string;
   state: string | null;
   district: string | null;
@@ -31,6 +37,7 @@ function formatOpportunity(opp: OpportunityRow) {
     title: opp.title,
     description: opp.description ?? "",
     focus_area: opp.focus_area,
+    csr_focus_area: opp.csr_focus_area ?? null,
     budget: Number(opp.budget),
     state: opp.state ?? "Pan India",
     district: opp.district ?? "",
@@ -63,6 +70,7 @@ const OPPORTUNITY_SELECT = `
   title,
   description,
   focus_area,
+  csr_focus_area,
   budget,
   state,
   district,
@@ -79,6 +87,55 @@ const OPPORTUNITY_SELECT = `
   )
 `;
 
+async function attachMatchScores(
+  rows: OpportunityRow[],
+  ngoProfile: NgoProfileForMatch | null,
+  engineContext: Awaited<ReturnType<typeof loadDiscoveredEngineContextForNgo>> | null,
+) {
+  const formatted = rows.map((row) => formatOpportunity(row));
+
+  if (!ngoProfile) {
+    return formatted.map((base) => ({
+      ...base,
+      match_score: null,
+      fit_label: null,
+      fit_insight: null,
+      matched_criteria: null,
+      scoring_source: null,
+    }));
+  }
+
+  const withScores = await Promise.all(
+    formatted.map(async (base) => {
+      const fit = await computeNgoOpportunityFit(
+        ngoProfile,
+        {
+          id: base.id,
+          title: base.title,
+          description: base.description,
+          focus_area: base.focus_area,
+          csr_focus_area: base.csr_focus_area,
+          budget: base.budget,
+          state: base.state,
+          district: base.district,
+          sdg_targets: base.sdg_targets,
+          target_beneficiaries: base.target_beneficiaries,
+          min_trust_score: base.min_trust_score,
+        },
+        engineContext,
+      );
+      return { ...base, ...fit };
+    }),
+  );
+
+  return withScores.sort((a, b) => {
+    const sa = a.match_score ?? -1;
+    const sb = b.match_score ?? -1;
+    if (sb !== sa) return sb - sa;
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+}
+
 export async function GET(request: Request) {
   const user = await getCaller(request);
   if (!user) {
@@ -94,6 +151,16 @@ export async function GET(request: Request) {
     return Response.json({ error: "Only NGO accounts can browse opportunities." }, { status: 403 });
   }
 
+  let ngoProfile: NgoProfileForMatch | null = null;
+  let engineContext: Awaited<ReturnType<typeof loadDiscoveredEngineContextForNgo>> | null = null;
+  const ngoId = await getNgoIdForUser(user);
+  if (ngoId) {
+    ngoProfile = await loadNgoProfileForMatch(ngoId);
+    if (ngoProfile) {
+      engineContext = await loadDiscoveredEngineContextForNgo(ngoId);
+    }
+  }
+
   const { data, error } = await supabaseAdmin
     .from("opportunities")
     .select(OPPORTUNITY_SELECT)
@@ -106,7 +173,11 @@ export async function GET(request: Request) {
       error.code === "42703" ||
       error.message?.includes("schema cache");
 
-    if (missingLifecycle) {
+    const missingCsrFocus =
+      error.message?.includes("csr_focus_area") ||
+      (error.code === "42703" && error.message?.includes("csr_focus_area"));
+
+    if (missingLifecycle || missingCsrFocus) {
       const { data: legacy, error: legacyError } = await supabaseAdmin
         .from("opportunities")
         .select(`
@@ -137,24 +208,12 @@ export async function GET(request: Request) {
         return Response.json({ error: "Could not load opportunities." }, { status: 500 });
       }
 
-      let ngoTrustLegacy = 0;
-      const ngoIdLegacy = await getNgoIdForUser(user);
-      if (ngoIdLegacy) {
-        const { data: ngo } = await supabaseAdmin
-          .from("ngos")
-          .select("trust_score, overall_trust_score")
-          .eq("id", ngoIdLegacy)
-          .maybeSingle();
-        ngoTrustLegacy = Number(ngo?.overall_trust_score ?? ngo?.trust_score ?? 0);
-      }
-
-      return Response.json({
-        opportunities: (legacy ?? []).map((row) => {
-          const base = formatOpportunity(row as OpportunityRow);
-          const ai = opportunityFitForNgo(ngoTrustLegacy, base.min_trust_score);
-          return { ...base, ai_fit_score: ai.score, ai_fit_label: ai.label, ai_insight: ai.insight };
-        }),
-      });
+      const opportunities = await attachMatchScores(
+        (legacy ?? []) as OpportunityRow[],
+        ngoProfile,
+        engineContext,
+      );
+      return Response.json({ opportunities });
     }
 
     console.error("[opportunities API] Error fetching opportunities:", error.message);
@@ -162,28 +221,7 @@ export async function GET(request: Request) {
   }
 
   const visible = (data ?? []).filter((row) => isVisibleToNgo(row as OpportunityRow));
+  const opportunities = await attachMatchScores(visible as OpportunityRow[], ngoProfile, engineContext);
 
-  let ngoTrust = 0;
-  const ngoId = await getNgoIdForUser(user);
-  if (ngoId) {
-    const { data: ngo } = await supabaseAdmin
-      .from("ngos")
-      .select("trust_score, overall_trust_score")
-      .eq("id", ngoId)
-      .maybeSingle();
-    ngoTrust = Number(ngo?.overall_trust_score ?? ngo?.trust_score ?? 0);
-  }
-
-  return Response.json({
-    opportunities: visible.map((row) => {
-      const base = formatOpportunity(row as OpportunityRow);
-      const ai = opportunityFitForNgo(ngoTrust, base.min_trust_score);
-      return {
-        ...base,
-        ai_fit_score: ai.score,
-        ai_fit_label: ai.label,
-        ai_insight: ai.insight,
-      };
-    }),
-  });
+  return Response.json({ opportunities });
 }
