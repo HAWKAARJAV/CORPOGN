@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { getCaller, getOrgContext } from "@/lib/access-control";
+import { ensureDefaultMilestones } from "@/lib/server/default-workspace-milestones";
 
 async function requireAdmin(request: Request) {
   const user = await getCaller(request);
@@ -132,6 +133,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       actor_id: auth.context.orgId,
       detail: { pre_assignment_id: preAssignmentId },
     });
+
+    const { data: ngoRow } = await supabaseAdmin.from("ngos").select("auth_user_id").eq("id", pa.ngo_id).maybeSingle();
+    try {
+      await ensureDefaultMilestones(pa.opportunity_id, {
+        projectTitle: opp.title,
+        createdBy: ngoRow?.auth_user_id ?? auth.user.id,
+      });
+    } catch (milestoneErr) {
+      console.error("default milestones seed failed:", milestoneErr);
+    }
   }
 
   await supabaseAdmin.from("research_logs").insert({

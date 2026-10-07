@@ -5271,6 +5271,48 @@ function ProjectsSection({ connections, onNavigate }: { connections: ProjectConn
   return <RealProjectsSection eyebrow="Operations Manager · Projects" connections={connections} onNavigate={onNavigate} />;
 }
 
+type NgoSignedWorkspace = { opportunityId: string; title: string; createdAt: string | null };
+
+function NgoActiveProjectPicker({
+  ngoId,
+  workspaces,
+  activeProjectId,
+  onSelect,
+  className = "",
+}: {
+  ngoId: string;
+  workspaces: NgoSignedWorkspace[];
+  activeProjectId: string | null;
+  onSelect: (opportunityId: string) => void;
+  className?: string;
+}) {
+  if (workspaces.length <= 1) return null;
+  return (
+    <label className={`flex items-center gap-2 text-xs ${className}`}>
+      <span className="font-semibold text-slate-500 whitespace-nowrap">Active project</span>
+      <select
+        data-testid="ngo-active-project-select"
+        value={activeProjectId ?? ""}
+        onChange={(e) => {
+          const id = e.target.value;
+          if (!id) return;
+          try {
+            localStorage.setItem(`ngo_active_project_${ngoId}`, id);
+          } catch { /* ignore */ }
+          onSelect(id);
+        }}
+        className="max-w-[14rem] truncate rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-800 shadow-sm"
+      >
+        {workspaces.map((ws) => (
+          <option key={ws.opportunityId} value={ws.opportunityId}>
+            {ws.title}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function MilestonesSection({ projectId, token }: { projectId: string | null; token: string }) {
   return (
     <div className="space-y-6">
@@ -5575,6 +5617,7 @@ export default function NgoDashboard({
   // opportunity_id (opportunities.id / project_workspaces.opportunity_id) —
   // this is a different id space from the legacy project_connections table.
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [signedWorkspaces, setSignedWorkspaces] = useState<NgoSignedWorkspace[]>([]);
   const [sharedState, setSharedState] = useState<NgoSharedState>(() => ({
     docs: {},
     docPaths: {},
@@ -5634,13 +5677,22 @@ export default function NgoDashboard({
           })
           .catch(() => { });
 
-        // Real project id for the /api/project-workspace/:projectId/:module
-        // route — the first SIGNED proposal's opportunity_id, if any.
-        fetch("/api/ngo/proposals", { headers: { Authorization: `Bearer ${accessToken}` } })
+        // Signed workspaces (newest first) — correct id space for module APIs.
+        fetch("/api/ngo/signed-workspaces", { headers: { Authorization: `Bearer ${accessToken}` } })
           .then((r) => r.json())
-          .then((body: { proposals?: { opportunity_id?: string | null; lifecycle_status?: string | null }[] }) => {
-            const signed = (body.proposals ?? []).find((p) => p.lifecycle_status === "signed" && p.opportunity_id);
-            if (signed?.opportunity_id) setActiveProjectId(signed.opportunity_id);
+          .then((body: { workspaces?: NgoSignedWorkspace[] }) => {
+            const list = body.workspaces ?? [];
+            setSignedWorkspaces(list);
+            if (list.length === 0) {
+              setActiveProjectId(null);
+              return;
+            }
+            let preferred: string | null = null;
+            try {
+              preferred = localStorage.getItem(`ngo_active_project_${ngo.id}`);
+            } catch { /* ignore */ }
+            const match = preferred ? list.find((w) => w.opportunityId === preferred) : null;
+            setActiveProjectId(match?.opportunityId ?? list[0].opportunityId);
           })
           .catch(() => { });
       }
@@ -5870,6 +5922,12 @@ export default function NgoDashboard({
       case "milestone-reporting": return (
         <div className="space-y-6">
           <SectionHeader title="Milestone Reporting" sub="Update progress in the shared workspace — corporate partners see the same records." />
+          <NgoActiveProjectPicker
+            ngoId={liveNgo.id}
+            workspaces={signedWorkspaces}
+            activeProjectId={activeProjectId}
+            onSelect={setActiveProjectId}
+          />
           <WorkspaceMilestonesPanel
             projectId={activeProjectId}
             getToken={async () => token}
@@ -6043,6 +6101,13 @@ export default function NgoDashboard({
             <div className="space-y-1.5">{[0, 1, 2].map((i) => <div key={i} className="h-0.5 w-5 bg-slate-600 rounded" />)}</div>
           </button>
           <div className="flex items-center gap-3 ml-auto">
+            <NgoActiveProjectPicker
+              ngoId={liveNgo.id}
+              workspaces={signedWorkspaces}
+              activeProjectId={activeProjectId}
+              onSelect={setActiveProjectId}
+              className="hidden md:flex"
+            />
             {/* Real-time sync indicator */}
             <span className="hidden sm:flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold">
               <span className={`h-2 w-2 rounded-full ${syncStatus === "live" ? "bg-emerald-400 animate-pulse" :

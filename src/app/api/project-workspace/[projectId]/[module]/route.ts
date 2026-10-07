@@ -6,6 +6,7 @@ import {
   PATCHABLE_FIELDS,
   resolveProjectWorkspaceAccess,
 } from "@/lib/server/project-workspace-access";
+import { ensureDefaultMilestones } from "@/lib/server/default-workspace-milestones";
 
 /**
  * Generic workspace module route — one handler for all 14 modules instead of
@@ -33,13 +34,36 @@ export async function GET(request: Request, { params }: { params: Promise<{ proj
   const access = await resolveProjectWorkspaceAccess(request, projectId, module);
   if ("error" in access) return NextResponse.json({ error: access.error }, { status: access.status });
 
-  const { data, error } = await supabaseAdmin
+  let { data, error } = await supabaseAdmin
     .from(table)
     .select("*")
     .eq("project_id", projectId)
     .order("created_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  if (module === "milestones" && (data?.length ?? 0) === 0 && access.permission === "edit") {
+    const { data: opp } = await supabaseAdmin
+      .from("opportunities")
+      .select("title")
+      .eq("id", projectId)
+      .maybeSingle();
+    try {
+      await ensureDefaultMilestones(projectId, {
+        projectTitle: opp?.title ?? null,
+        createdBy: access.user.id,
+      });
+      const refetch = await supabaseAdmin
+        .from(table)
+        .select("*")
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false });
+      if (!refetch.error) data = refetch.data;
+    } catch (seedErr) {
+      console.error("lazy milestone seed failed:", seedErr);
+    }
+  }
+
   return NextResponse.json({ module, permission: access.permission, items: data });
 }
 

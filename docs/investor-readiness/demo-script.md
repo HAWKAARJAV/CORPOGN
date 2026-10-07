@@ -137,6 +137,8 @@ CorpoGN connects **capital**, **execution**, **governance**, and **proof** in on
 
 No hardcoded progress in the corporate UI — value comes from `PATCH /api/project-workspace/:id/milestones`.
 
+**Newly activated projects (not the flagship seed):** admin Activate and the first NGO milestone load auto-create five starter rows. For production workspaces activated before this fix, run `npm run backfill:milestones -- --title "Senior Care"` (or omit `--title` for all empty workspaces).
+
 ---
 
 ## Production / corpogn.tech checklist

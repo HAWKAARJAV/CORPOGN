@@ -13,6 +13,7 @@
     "seed:corporate-employees": "node tooling/scripts/seed-corporate-employees.mjs",
     "seed:demo": "node tooling/scripts/seed-investor-demo.mjs",
     "backfill:project-connections": "node tooling/scripts/backfill-activated-project-connections.mjs",
+    "backfill:milestones": "node tooling/scripts/backfill-default-milestones.mjs",
     "ngo:import": "node tooling/scripts/ngo-enrichment/import-discovered.mjs",
     "ngo:enrich": "node tooling/scripts/ngo-enrichment/enrich.mjs",
     "ngo:enrich:dry": "node tooling/scripts/ngo-enrichment/enrich.mjs --dry-run",
