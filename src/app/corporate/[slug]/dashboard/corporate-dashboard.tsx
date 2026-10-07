@@ -385,12 +385,6 @@ export function CorporateDashboard({ slug }: { slug: string }) {
   );
 
   useEffect(() => {
-    if (hasActiveProject && !isProjectWorkspaceOpen) {
-      setIsProjectWorkspaceOpen(true);
-    }
-  }, [hasActiveProject, isProjectWorkspaceOpen]);
-
-  useEffect(() => {
     let ignore = false;
 
     async function loadCorporate() {
