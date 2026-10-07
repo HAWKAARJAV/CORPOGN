@@ -49,7 +49,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     );
   }
 
-  if (pa.status === "assigned") {
+  // `status` may be "assigned" from an older admin Matchmaker "Assign Project" action
+  // before activation — only `activated_at` means the workspace is live.
+  if (pa.activated_at) {
     return NextResponse.json({ error: "This project is already activated." }, { status: 400 });
   }
 

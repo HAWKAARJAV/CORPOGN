@@ -12,6 +12,11 @@ import { supabaseBrowser } from "@/lib/supabase-browser";
 import { AiAssistBadge } from "@/components/ai-assist-badge";
 import { DashboardCopilot } from "@/components/dashboard-copilot";
 import { AI_PRODUCT_COPY } from "@/lib/ai-insights";
+import {
+  canAdminActivatePreAssignment,
+  preAssignmentActivationHint,
+  preAssignmentActivationUiState,
+} from "@/lib/pre-assignment-activation";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -615,8 +620,10 @@ type PreAssignmentLedgerRow = {
 function PendingConfirmationsTab() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [readyToActivate, setReadyToActivate] = useState<PreAssignmentLedgerRow[]>([]);
+  const [awaitingPartnershipConfirm, setAwaitingPartnershipConfirm] = useState<PreAssignmentLedgerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [preAssignError, setPreAssignError] = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionError, setActionError] = useState<Record<string, string>>({});
   const [successId, setSuccessId] = useState<string | null>(null);
@@ -625,21 +632,31 @@ function PendingConfirmationsTab() {
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
+    setPreAssignError("");
     try {
+      const { data: sessionData } = await supabaseBrowser.auth.getSession();
+      const authHeaders = { Authorization: `Bearer ${sessionData.session?.access_token ?? ""}` };
       const params = new URLSearchParams({ status: "pending_admin", limit: "100" });
       const [legacyRes, preRes] = await Promise.all([
-        fetch(`/api/admin/projects?${params}`),
-        fetch("/api/admin/pre-assignments"),
+        fetch(`/api/admin/projects?${params}`, { headers: authHeaders }),
+        fetch("/api/admin/pre-assignments", { headers: authHeaders }),
       ]);
       const d = await legacyRes.json();
       if (!legacyRes.ok) throw new Error(d.error || `HTTP ${legacyRes.status}`);
       setProjects(d.projects ?? []);
 
       const pre = await preRes.json();
-      const rows = (pre.pre_assignments ?? []) as PreAssignmentLedgerRow[];
-      setReadyToActivate(
-        rows.filter((p) => p.corporate_confirmed_at && p.ngo_confirmed_at && !p.activated_at),
-      );
+      if (!preRes.ok) {
+        setPreAssignError(pre.error || `Pre-assignments HTTP ${preRes.status}`);
+        setReadyToActivate([]);
+        setAwaitingPartnershipConfirm([]);
+      } else {
+        const rows = (pre.pre_assignments ?? []) as PreAssignmentLedgerRow[];
+        setReadyToActivate(rows.filter((p) => canAdminActivatePreAssignment(p)));
+        setAwaitingPartnershipConfirm(
+          rows.filter((p) => !p.activated_at && !canAdminActivatePreAssignment(p)),
+        );
+      }
     } catch (e: any) {
       setError(e.message || "Failed to load pending confirmations");
     } finally {
@@ -707,12 +724,38 @@ function PendingConfirmationsTab() {
           <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
         </button>
         <span className="text-sm text-white/30">
-          {projects.length} legacy connection{projects.length === 1 ? "" : "s"} · {readyToActivate.length} pre-assign ready to activate
+          {projects.length} legacy connection{projects.length === 1 ? "" : "s"} · {readyToActivate.length} ready to activate ·{" "}
+          {awaitingPartnershipConfirm.length} awaiting partnership confirm
         </span>
       </div>
 
+      {preAssignError ? (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          Could not load pre-assignments: {preAssignError}. Sign in as platform admin and refresh — activation controls depend on this list.
+        </div>
+      ) : null}
+
       {activateMsg ? (
         <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">{activateMsg}</div>
+      ) : null}
+
+      {!loading && !preAssignError && readyToActivate.length === 0 && awaitingPartnershipConfirm.length === 0 ? (
+        <div className="rounded-2xl border border-white/5 bg-white/3 p-8 text-center text-sm text-white/40 leading-relaxed">
+          No pre-assignments in the activation queue. When corporate and NGO both use <strong className="text-white/60">Confirm partnership</strong>{" "}
+          (My Projects / NGO proposals — not meeting RSVP), rows appear here as ready to activate.
+        </div>
+      ) : null}
+
+      {awaitingPartnershipConfirm.length > 0 ? (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-white/80">Pre-assignments — waiting on partnership confirm</h3>
+          {awaitingPartnershipConfirm.map((p) => (
+            <div key={p.id} className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-white/70">
+              <span className="font-semibold text-white">{p.ngo_name}</span> ↔ {p.corporate_name} · {p.opportunity_title}
+              <p className="mt-2 text-xs text-amber-200/90">{preAssignmentActivationHint(preAssignmentActivationUiState(p))}</p>
+            </div>
+          ))}
+        </div>
       ) : null}
 
       {readyToActivate.length > 0 ? (
@@ -1038,6 +1081,7 @@ function MatchmakerTab() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [overrideDraft, setOverrideDraft] = useState<{ ngoId: string; notes: string } | null>(null);
   const [activateMsg, setActivateMsg] = useState<string | null>(null);
+  const [preLoadError, setPreLoadError] = useState("");
 
   async function authHeader() {
     const { data } = await supabaseBrowser.auth.getSession();
@@ -1047,8 +1091,10 @@ function MatchmakerTab() {
   const loadOpps = useCallback(async () => {
     setLoadingOpps(true);
     try {
-      const res = await fetch("/api/admin/opportunities");
+      const headers = await authHeader();
+      const res = await fetch("/api/admin/opportunities", { headers });
       const d = await res.json();
+      if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
       setOpportunities(d.opportunities ?? []);
     } catch (e) {
       console.error(e);
@@ -1059,12 +1105,20 @@ function MatchmakerTab() {
 
   const loadPre = useCallback(async () => {
     setLoadingPre(true);
+    setPreLoadError("");
     try {
-      const res = await fetch("/api/admin/pre-assignments");
+      const headers = await authHeader();
+      const res = await fetch("/api/admin/pre-assignments", { headers });
       const d = await res.json();
+      if (!res.ok) {
+        setPreLoadError(d.error || `HTTP ${res.status}`);
+        setPreAssignments([]);
+        return;
+      }
       setPreAssignments(d.pre_assignments ?? []);
     } catch (e) {
       console.error(e);
+      setPreLoadError("Network error loading pre-assignments.");
     } finally {
       setLoadingPre(false);
     }
@@ -1274,6 +1328,9 @@ function MatchmakerTab() {
           {activateMsg ? (
             <p className="text-[11px] text-violet-300 mb-3 leading-relaxed">{activateMsg}</p>
           ) : null}
+          {preLoadError ? (
+            <p className="text-[11px] text-red-300 mb-3 leading-relaxed">{preLoadError}</p>
+          ) : null}
           {loadingPre ? (
             <div className="space-y-3">
               {[...Array(3)].map((_, i) => (
@@ -1317,7 +1374,12 @@ function MatchmakerTab() {
                       <span className="text-emerald-400">Workspace live</span>
                     ) : null}
                   </div>
-                  {!p.activated_at && p.corporate_confirmed_at && p.ngo_confirmed_at ? (
+                  {!p.activated_at ? (
+                    <p className="text-[9px] text-white/45 mb-2 leading-snug">
+                      {preAssignmentActivationHint(preAssignmentActivationUiState(p))}
+                    </p>
+                  ) : null}
+                  {canAdminActivatePreAssignment(p) ? (
                     <button
                       type="button"
                       onClick={() => handleActivate(p.id)}
@@ -1464,11 +1526,11 @@ function MatchmakerTab() {
                               />
                               <div className="mt-2 flex gap-2">
                                 <button
-                                  onClick={() => handleAssign(m.id, m.match.total, "assigned", overrideDraft.notes)}
+                                  onClick={() => handleAssign(m.id, m.match.total, "shortlisted", overrideDraft.notes)}
                                   disabled={!overrideDraft.notes.trim() || actionLoading !== null}
                                   className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white font-bold text-2xs"
                                 >
-                                  Confirm override
+                                  Shortlist (override)
                                 </button>
                                 <button onClick={() => setOverrideDraft(null)} className="px-2.5 py-1 rounded-lg border border-white/10 text-white/60 text-2xs">
                                   Cancel
@@ -1487,12 +1549,9 @@ function MatchmakerTab() {
                           <div className="flex items-center gap-1.5 mt-4">
                             {m.shortlist_status === "shortlisted" ? (
                               <>
-                                <button
-                                  onClick={() => handleAssign(m.id, m.match.total, "assigned")}
-                                  disabled={actionLoading !== null}
-                                  className="px-2.5 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-2xs transition-colors flex items-center gap-1">
-                                  {actionLoading === `${m.id}-assigned` ? "Assigning..." : "Assign Project"}
-                                </button>
+                                <span className="max-w-[140px] text-right text-[9px] leading-snug text-emerald-300/90">
+                                  Shortlisted — corp &amp; NGO confirm, then activate in the ledger
+                                </span>
                                 <button
                                   onClick={() => handleAssign(m.id, m.match.total, "rejected")}
                                   disabled={actionLoading !== null}
@@ -1502,7 +1561,7 @@ function MatchmakerTab() {
                               </>
                             ) : m.shortlist_status === "assigned" ? (
                               <span className="text-emerald-400 text-2xs font-semibold flex items-center gap-1">
-                                <CheckCircle2 className="w-3.5 h-3.5" /> Assigned
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Workspace live
                               </span>
                             ) : m.shortlist_status === "rejected" ? (
                               <span className="text-red-400 text-2xs font-semibold flex items-center gap-1">
