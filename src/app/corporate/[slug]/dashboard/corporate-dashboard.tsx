@@ -331,10 +331,12 @@ export function CorporateDashboard({ slug }: { slug: string }) {
   const isUnlocked = corporate?.access_status === "active";
   const isCorporateEmployee = viewerAccountType === "corporate_employee";
   const canOpenAssignedPages = isUnlocked || isCorporateEmployee;
-  const hasActiveProject = projectConnections.some(
-    (connection) => connection.status === "active" || connection.status === "completed",
-  );
   const { data: portfolioOverview } = useWorkspaceOverview();
+  const signedWorkspaceCount = portfolioOverview?.projects?.length ?? 0;
+  const hasActiveProject =
+    projectConnections.some(
+      (connection) => connection.status === "active" || connection.status === "completed",
+    ) || signedWorkspaceCount > 0;
   const unreadCount = portfolioOverview?.totals?.pendingApprovals ?? 0;
 
   // Items that require an active account unlock
@@ -381,6 +383,12 @@ export function CorporateDashboard({ slug }: { slug: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [canOpenAssignedPages, visibleSidebarItems, hasActiveProject],
   );
+
+  useEffect(() => {
+    if (hasActiveProject && !isProjectWorkspaceOpen) {
+      setIsProjectWorkspaceOpen(true);
+    }
+  }, [hasActiveProject, isProjectWorkspaceOpen]);
 
   useEffect(() => {
     let ignore = false;
@@ -2090,6 +2098,15 @@ function RecommendedPreAssignmentList({
   );
 }
 
+function activatedPartnerForOpportunity(
+  portfolio: PreAssignmentPortfolio | null,
+  opportunityId: string,
+): PreAssignmentCandidate | undefined {
+  const bundle = portfolio?.byOpportunity.find((item) => item.opportunityId === opportunityId);
+  const candidates = [...(bundle?.applicants ?? []), ...(bundle?.adminSuggested ?? [])];
+  return candidates.find((candidate) => candidate.activatedAt);
+}
+
 function MyProjectsPage({
   navigateTo,
   onReviewProposal,
@@ -2149,7 +2166,12 @@ function MyProjectsPage({
     preAssignmentPortfolio?.totals.applicants ??
     proposals.length;
   const totalAdminSuggested = preAssignmentPortfolio?.totals.adminSuggested ?? 0;
-  const totalActive = activeConnections.length;
+  const signedOpportunityCount = postedOpportunities.filter(
+    (opp) =>
+      opp.lifecycle_status === "signed" &&
+      !activeByProjectName.has(opp.title.toLowerCase()),
+  ).length;
+  const totalActive = activeConnections.length + signedOpportunityCount;
 
   if (!totalPosted && !totalApplicants && !totalActive) {
     return (
@@ -2218,13 +2240,24 @@ function MyProjectsPage({
         {postedOpportunities.map((opp) => {
           const applicants = getApplicantsForOpportunity(opp.title);
           const assignedConnection = activeByProjectName.get(opp.title.toLowerCase());
+          const activatedPartner = assignedConnection
+            ? undefined
+            : activatedPartnerForOpportunity(preAssignmentPortfolio, opp.id);
+          const isAssigned =
+            Boolean(assignedConnection) ||
+            opp.lifecycle_status === "signed" ||
+            Boolean(activatedPartner);
+          const assignedNgoName =
+            assignedConnection?.ngo_name ?? activatedPartner?.ngoName ?? "Partner NGO";
           const statusLabel = assignedConnection
             ? assignedConnection.status === "completed"
               ? "Completed"
               : assignedConnection.progress > 0
                 ? "Current Project"
                 : "Assigned"
-            : "Yet to assign";
+            : isAssigned
+              ? "Assigned"
+              : "Yet to assign";
 
           return (
             <Card className="p-5" key={opp.id}>
@@ -2257,10 +2290,13 @@ function MyProjectsPage({
                   ) : null}
                 </div>
 
-                {assignedConnection ? (
+                {isAssigned ? (
                   <button
                     className="inline-flex shrink-0 flex-col items-end gap-0.5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-                    onClick={() => onOpenWorkspace(assignedConnection)}
+                    onClick={() => {
+                      if (assignedConnection) onOpenWorkspace(assignedConnection);
+                      else navigateTo("Dashboard");
+                    }}
                     type="button"
                     title="Document requests and partner progress updates"
                   >
@@ -2273,11 +2309,11 @@ function MyProjectsPage({
                 ) : null}
               </div>
 
-              {!assignedConnection ? (
+              {!isAssigned ? (
                 <ApplicantsAndSuggestions opportunityId={opp.id} corporateSlug={corporateSlug} />
               ) : (
                 <div className="mt-5 rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-800">
-                  Assigned to <strong>{assignedConnection.ngo_name}</strong>. Open the workspace to manage budgets, milestones, impact, reports, and compliance.
+                  Assigned to <strong>{assignedNgoName}</strong>. Open the workspace to manage budgets, milestones, impact, reports, and compliance.
                 </div>
               )}
 

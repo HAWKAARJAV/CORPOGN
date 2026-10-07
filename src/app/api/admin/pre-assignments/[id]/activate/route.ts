@@ -32,7 +32,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const { data: pa, error: fetchError } = await supabaseAdmin
     .from("pre_assignments")
-    .select("*, opportunities(id, corporate_id, title, lifecycle_status)")
+    .select("*, opportunities(id, corporate_id, title, focus_area, budget, lifecycle_status)")
     .eq("id", preAssignmentId)
     .maybeSingle();
 
@@ -73,7 +73,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     .update({ lifecycle_status: "signed" })
     .eq("id", pa.opportunity_id);
 
-  const opp = pa.opportunities as { id: string; corporate_id: string } | null;
+  const opp = pa.opportunities as {
+    id: string;
+    corporate_id: string;
+    title: string;
+    focus_area?: string | null;
+    budget?: number | null;
+  } | null;
   let workspace = null;
   if (opp?.corporate_id && pa.ngo_id) {
     const { data: ws, error: wsError } = await supabaseAdmin
@@ -91,6 +97,32 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .single();
     if (wsError) return NextResponse.json({ error: `Activation succeeded but workspace creation failed: ${wsError.message}` }, { status: 500 });
     workspace = ws;
+
+    // Legacy corporate UI (My Projects status, sidebar unlock) keys off active
+    // project_connections — mirror the investor demo seed so pre-assignment
+    // activation matches the formal matchmaker approval path.
+    const { error: connectionError } = await supabaseAdmin.from("project_connections").upsert(
+      {
+        corporate_id: opp.corporate_id,
+        ngo_id: pa.ngo_id,
+        project_name: opp.title,
+        focus_area: opp.focus_area ?? "CSR",
+        budget: opp.budget ?? 2500000,
+        status: "active",
+        progress: 0,
+        milestone: "Kickoff and baseline",
+        latest_update: "Project workspace activated by platform admin.",
+      },
+      { onConflict: "corporate_id,ngo_id,project_name" },
+    );
+    if (connectionError) {
+      return NextResponse.json(
+        { error: `Workspace created but project connection sync failed: ${connectionError.message}` },
+        { status: 500 },
+      );
+    }
+
+    await supabaseAdmin.from("ngos").update({ has_project: true }).eq("id", pa.ngo_id);
 
     await supabaseAdmin.from("activity_logs").insert({
       project_id: pa.opportunity_id,
