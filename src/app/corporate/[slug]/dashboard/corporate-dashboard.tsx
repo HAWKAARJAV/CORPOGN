@@ -45,6 +45,7 @@ import {
   PlusCircle,
   ShieldCheck,
   Sparkles,
+  Target,
   Table2,
   TrendingUp,
   Users,
@@ -310,8 +311,22 @@ export function CorporateDashboard({ slug }: { slug: string }) {
   const [postedOpportunities, setPostedOpportunities] = useState<CsrOpportunity[]>([]);
   const [recommendations, setRecommendations] = useState<CorporateRecommendation[]>([]);
   const [recommendationActionId, setRecommendationActionId] = useState("");
+  const [preAssignmentPortfolio, setPreAssignmentPortfolio] = useState<PreAssignmentPortfolio | null>(null);
   const [activeComparisonProposal, setActiveComparisonProposal] = useState<ProjectConnection | null>(null);
   const [activeComparisonOpp, setActiveComparisonOpp] = useState<CsrOpportunity | null>(null);
+
+  async function refreshPreAssignmentPortfolio(accessToken: string) {
+    try {
+      const res = await fetch("/api/corporates/pre-assignments", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (res.ok) {
+        setPreAssignmentPortfolio((await res.json()) as PreAssignmentPortfolio);
+      }
+    } catch {
+      // Non-fatal when matchmaking tables are not migrated yet.
+    }
+  }
 
   const isUnlocked = corporate?.access_status === "active";
   const isCorporateEmployee = viewerAccountType === "corporate_employee";
@@ -579,6 +594,8 @@ export function CorporateDashboard({ slug }: { slug: string }) {
       } catch {
         // Non-fatal: lifecycle migration may not be applied yet
       }
+
+      await refreshPreAssignmentPortfolio(session.access_token);
 
       setIsLoading(false);
     }
@@ -1163,12 +1180,23 @@ export function CorporateDashboard({ slug }: { slug: string }) {
                   setPostedOpportunities((current) => current.map((o) => (o.id === updated.id ? updated : o)))
                 }
                 corporateSlug={slug}
+                preAssignmentPortfolio={preAssignmentPortfolio}
               />
             ) : activeItem === "Recommended NGOs" ? (
               <RecommendedNgosPage
                 recommendations={recommendations}
                 actionId={recommendationActionId}
                 onDecision={decideRecommendation}
+                preAssignmentPortfolio={preAssignmentPortfolio}
+                corporateSlug={slug}
+                navigateTo={navigateTo}
+                onPreAssignmentsChanged={() => {
+                  void supabaseBrowser.auth.getSession().then(({ data }) => {
+                    if (data.session?.access_token) {
+                      void refreshPreAssignmentPortfolio(data.session.access_token);
+                    }
+                  });
+                }}
               />
             ) : activeItem === "Dashboard" ? (
               <DashboardPage
@@ -1176,6 +1204,7 @@ export function CorporateDashboard({ slug }: { slug: string }) {
                 navigateTo={navigateTo}
                 postedOpportunities={postedOpportunities}
                 projectConnections={projectConnections}
+                preAssignmentPortfolio={preAssignmentPortfolio}
                 onReviewProposal={(prop, opp) => {
                   setActiveComparisonProposal(prop);
                   setActiveComparisonOpp(opp);
@@ -1214,6 +1243,10 @@ export function CorporateDashboard({ slug }: { slug: string }) {
                 navigateTo={navigateTo}
                 onAssignProject={assignProjectToNgo}
                 setActiveNgoId={setActiveNgoId}
+                hasOpenMatchmaking={Boolean(
+                  preAssignmentPortfolio?.totals.applicants ||
+                    preAssignmentPortfolio?.totals.adminSuggested,
+                )}
               />
             ) : activeItem === "Discover NGOs" ? (
               <DiscoverNgosPage corporateSlug={slug} />
@@ -1273,14 +1306,42 @@ export function CorporateDashboard({ slug }: { slug: string }) {
           }}
           onAssign={assignProjectToNgo}
           onSwitchProposal={(prop) => setActiveComparisonProposal(prop)}
+          onGoToMyProjects={() => {
+            setActiveComparisonProposal(null);
+            setActiveComparisonOpp(null);
+            setActiveItem("My Projects");
+          }}
         />
       )}
     </>
   );
 }
 
+type PreAssignmentPortfolio = {
+  totals: {
+    applicants: number;
+    adminSuggested: number;
+    awaitingCorporateConfirm: number;
+    awaitingActivation: number;
+  };
+  byOpportunity: PreAssignmentOpportunityBundle[];
+};
+
+type PreAssignmentOpportunityBundle = {
+  opportunityId: string;
+  title: string;
+  focusArea: string | null;
+  state: string | null;
+  budget: number | null;
+  lifecycleStatus: string | null;
+  status: string | null;
+  applicants: PreAssignmentCandidate[];
+  adminSuggested: PreAssignmentCandidate[];
+};
+
 type PreAssignmentCandidate = {
   id: string;
+  opportunityId?: string;
   status: string;
   source: string[];
   matchScore: number;
@@ -1963,6 +2024,72 @@ function ApplicantsAndSuggestions({ opportunityId, corporateSlug }: { opportunit
   );
 }
 
+function RecommendedPreAssignmentList({
+  opportunityId,
+  candidates,
+  corporateSlug,
+  onChanged,
+}: {
+  opportunityId: string;
+  candidates: PreAssignmentCandidate[];
+  corporateSlug: string;
+  onChanged: () => void;
+}) {
+  const [shortlistingId, setShortlistingId] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState("");
+
+  async function patchBody(body: Record<string, string>) {
+    const { data: sessionData } = await supabaseBrowser.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) return { ok: false, error: "Not signed in." };
+    const res = await fetch(`/api/corporates/opportunities/${opportunityId}/pre-assignments`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    });
+    const data = (await res.json()) as { error?: string };
+    return { ok: res.ok, error: data.error };
+  }
+
+  return (
+    <div className="grid gap-3">
+      {actionError ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{actionError}</div>
+      ) : null}
+      {candidates.map((c) => (
+        <CandidateCard
+          key={c.id}
+          candidate={c}
+          corporateSlug={corporateSlug}
+          showScore
+          isShortlisting={shortlistingId === c.id}
+          isConfirming={confirmingId === c.id}
+          onShortlist={async () => {
+            setShortlistingId(c.id);
+            setActionError("");
+            const result = await patchBody({ pre_assignment_id: c.id, status: "shortlisted" });
+            if (!result.ok) setActionError(result.error ?? "Could not shortlist.");
+            else onChanged();
+            setShortlistingId(null);
+          }}
+          onConfirm={async () => {
+            setConfirmingId(c.id);
+            setActionError("");
+            const result = await patchBody({ pre_assignment_id: c.id, action: "confirm" });
+            if (!result.ok) setActionError(result.error ?? "Could not confirm.");
+            else onChanged();
+            setConfirmingId(null);
+          }}
+          onMessage={() => {
+            /* messaging lives in My Projects modal */
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 function MyProjectsPage({
   navigateTo,
   onReviewProposal,
@@ -1971,6 +2098,7 @@ function MyProjectsPage({
   projectConnections,
   onPublished,
   corporateSlug,
+  preAssignmentPortfolio,
 }: {
   navigateTo: (destination: Destination) => void;
   onReviewProposal: (prop: ProjectConnection, opp: CsrOpportunity) => void;
@@ -1979,6 +2107,7 @@ function MyProjectsPage({
   projectConnections: ProjectConnection[];
   onPublished: (updated: CsrOpportunity) => void;
   corporateSlug: string;
+  preAssignmentPortfolio: PreAssignmentPortfolio | null;
 }) {
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [expandedWorkspaceId, setExpandedWorkspaceId] = useState<string | null>(null);
@@ -2016,7 +2145,10 @@ function MyProjectsPage({
     proposals.filter((connection) => connection.project_name.toLowerCase() === title.toLowerCase());
 
   const totalPosted = postedOpportunities.length + activeConnectionsWithoutOpportunity.length;
-  const totalApplicants = proposals.length;
+  const totalApplicants =
+    preAssignmentPortfolio?.totals.applicants ??
+    proposals.length;
+  const totalAdminSuggested = preAssignmentPortfolio?.totals.adminSuggested ?? 0;
   const totalActive = activeConnections.length;
 
   if (!totalPosted && !totalApplicants && !totalActive) {
@@ -2069,11 +2201,18 @@ function MyProjectsPage({
         }
       />
 
-      <section className="grid gap-3 sm:grid-cols-3">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="Posted Projects" value={String(totalPosted)} meta="Open, assigned, and current" tone="blue" />
-        <MetricCard label="NGO Applicants" value={String(totalApplicants)} meta="Waiting for review" tone="amber" />
+        <MetricCard label="NGO Applicants" value={String(totalApplicants)} meta="Pre-assignment applications" tone="amber" />
+        <MetricCard label="Admin Suggested" value={String(totalAdminSuggested)} meta="From matchmaker" tone="violet" />
         <MetricCard label="Current Workspaces" value={String(totalActive)} meta="Assigned or live projects" tone="green" />
       </section>
+      {(preAssignmentPortfolio?.totals.awaitingCorporateConfirm ?? 0) > 0 ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <strong>{preAssignmentPortfolio?.totals.awaitingCorporateConfirm}</strong> shortlisted NGO
+          {preAssignmentPortfolio?.totals.awaitingCorporateConfirm === 1 ? "" : "s"} need your partnership confirmation.
+        </div>
+      ) : null}
 
       <div className="space-y-4">
         {postedOpportunities.map((opp) => {
@@ -2194,11 +2333,23 @@ function RecommendedNgosPage({
   recommendations,
   actionId,
   onDecision,
+  preAssignmentPortfolio,
+  corporateSlug,
+  navigateTo,
+  onPreAssignmentsChanged,
 }: {
   recommendations: CorporateRecommendation[];
   actionId: string;
   onDecision: (recommendation: CorporateRecommendation, decision: "accept" | "reject" | "request_more") => void;
+  preAssignmentPortfolio: PreAssignmentPortfolio | null;
+  corporateSlug: string;
+  navigateTo: (destination: Destination) => void;
+  onPreAssignmentsChanged: () => void;
 }) {
+  const matchmakerGroups = (preAssignmentPortfolio?.byOpportunity ?? []).filter(
+    (bundle) => bundle.adminSuggested.length > 0,
+  );
+
   const grouped = recommendations.reduce((map, recommendation) => {
     const key = recommendation.opportunity_id;
     const existing = map.get(key) ?? [];
@@ -2207,16 +2358,16 @@ function RecommendedNgosPage({
     return map;
   }, new Map<string, CorporateRecommendation[]>());
 
-  if (!recommendations.length) {
+  if (!recommendations.length && !matchmakerGroups.length) {
     return (
       <div className="space-y-6">
         <PageHero
           eyebrow="Recommended NGOs"
           title="Admin recommendations will appear here"
-          text="Once the platform team reviews your posted CSR projects, shortlisted NGOs with project-specific trust scores will be sent here for your decision."
+          text="After you publish a CSR project, the platform matchmaker can suggest ranked NGOs here. You shortlist, confirm partnership, and wait for admin activation — or accept a formal trust-score batch when sent."
         />
         <Card className="p-6 text-sm text-slate-500">
-          No recommendations have been sent yet.
+          No matchmaker suggestions or formal recommendation batches yet. Check My Projects for NGO applications.
         </Card>
       </div>
     );
@@ -2226,9 +2377,54 @@ function RecommendedNgosPage({
     <div className="space-y-6">
       <PageHero
         eyebrow="Recommended NGOs"
-        title="Review AI-ranked NGO recommendations"
-        text="Compare trust score breakdowns, strengths, similar project evidence, budget fit, and compliance status before accepting an NGO."
+        title="Review platform NGO recommendations"
+        text="Matchmaker suggestions (pre-assignment path) and formal trust-score batches both appear here. Prefer shortlist → confirm → admin activate for signed workspaces."
       />
+
+      {matchmakerGroups.length ? (
+        <section className="space-y-4">
+          <SectionHeading
+            icon={Target}
+            title="Matchmaker suggestions"
+            text="Sent from Admin → Matchmaker. Shortlist and confirm in line, or open the full applicant view in My Projects."
+          />
+          {matchmakerGroups.map((bundle) => (
+            <Card className="p-5" key={bundle.opportunityId}>
+              <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-violet-600">Project</p>
+                  <h3 className="text-lg font-bold text-slate-900">{bundle.title}</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {bundle.focusArea ?? "CSR"} {bundle.state ? `· ${bundle.state}` : ""}{" "}
+                    {bundle.budget ? `· ${formatINR(bundle.budget)}` : ""}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigateTo("My Projects")}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Open in My Projects
+                </button>
+              </div>
+              <RecommendedPreAssignmentList
+                opportunityId={bundle.opportunityId}
+                candidates={bundle.adminSuggested}
+                corporateSlug={corporateSlug}
+                onChanged={onPreAssignmentsChanged}
+              />
+            </Card>
+          ))}
+        </section>
+      ) : null}
+
+      {recommendations.length ? (
+        <SectionHeading
+          icon={Sparkles}
+          title="Formal trust-score batches"
+          text="Legacy fast-path: accepting allocates via project connection. For new projects, use the matchmaker flow above when available."
+        />
+      ) : null}
 
       {[...grouped.entries()].map(([opportunityId, items]) => {
         const project = items[0]?.opportunities;
@@ -2378,6 +2574,7 @@ function DashboardPage({
   navigateTo,
   postedOpportunities,
   projectConnections,
+  preAssignmentPortfolio,
   onReviewProposal,
   viewerPosition,
   viewerAllowedPages,
@@ -2386,6 +2583,7 @@ function DashboardPage({
   navigateTo: (destination: Destination, focus?: { campaignId?: string; ngoId?: string; approvalId?: string }) => void;
   postedOpportunities: CsrOpportunity[];
   projectConnections: ProjectConnection[];
+  preAssignmentPortfolio: PreAssignmentPortfolio | null;
   onReviewProposal: (prop: ProjectConnection, opp: CsrOpportunity) => void;
   viewerPosition: string;
   viewerAllowedPages: string[];
@@ -2552,12 +2750,19 @@ function DashboardPage({
             <Card>
               <SectionHeading
                 icon={PlusCircle}
-                title="Posted CSR Projects & NGO Applications"
-                text="Track applications and assign registered NGOs to initiate signed projects."
+                title="Posted CSR Projects & matchmaking"
+                text="NGO applications and admin suggestions live in My Projects — shortlist, confirm partnership, then wait for platform admin activation."
               />
               <div className="grid gap-4 mt-4">
                 {postedOpportunities.map((opp) => {
-                  const proposals = getProposalsForOpp(opp.title);
+                  const bundle = preAssignmentPortfolio?.byOpportunity.find((b) => b.opportunityId === opp.id);
+                  const applicantCount = bundle?.applicants.length ?? 0;
+                  const suggestedCount = bundle?.adminSuggested.length ?? 0;
+                  const legacyProposals = getProposalsForOpp(opp.title);
+                  const pendingConfirm = (bundle?.applicants ?? [])
+                    .concat(bundle?.adminSuggested ?? [])
+                    .filter((c) => c.status === "shortlisted" && !c.corporateConfirmedAt).length;
+
                   return (
                     <div key={opp.id} className="rounded-xl border border-slate-200 bg-slate-50/50 p-5 space-y-4">
                       <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -2571,41 +2776,64 @@ function DashboardPage({
                             opp.status === "assigned" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
                               "bg-slate-100 text-slate-600 border-slate-200"
                           }`}>
-                          {opp.status}
+                          {opp.lifecycle_status?.replace("_", " ") ?? opp.status}
                         </span>
                       </div>
 
-                      {proposals.length > 0 ? (
+                      <div className="flex flex-wrap gap-2 text-xs">
+                        {applicantCount ? (
+                          <span className="rounded-full bg-amber-50 px-2.5 py-1 font-semibold text-amber-800">
+                            {applicantCount} applicant{applicantCount === 1 ? "" : "s"}
+                          </span>
+                        ) : null}
+                        {suggestedCount ? (
+                          <span className="rounded-full bg-violet-50 px-2.5 py-1 font-semibold text-violet-800">
+                            {suggestedCount} admin suggested
+                          </span>
+                        ) : null}
+                        {pendingConfirm ? (
+                          <span className="rounded-full bg-blue-50 px-2.5 py-1 font-semibold text-blue-800">
+                            {pendingConfirm} awaiting your confirm
+                          </span>
+                        ) : null}
+                      </div>
+
+                      {applicantCount || suggestedCount ? (
+                        <button
+                          type="button"
+                          onClick={() => navigateTo("My Projects")}
+                          className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-blue-600 px-4 text-xs font-semibold text-white hover:bg-blue-700"
+                        >
+                          <Users className="h-3.5 w-3.5" />
+                          Review applicants & suggestions
+                        </button>
+                      ) : legacyProposals.length > 0 ? (
                         <div className="pt-3 border-t border-slate-200/80 space-y-3">
-                          <p className="text-xs font-bold uppercase tracking-wider text-slate-400">NGO Applications ({proposals.length})</p>
-                          <div className="space-y-2.5">
-                            {proposals.map((prop) => (
-                              <div key={prop.id} className="rounded-lg border border-slate-200 bg-white p-3.5 space-y-2">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div>
-                                    <p className="text-sm font-semibold text-slate-900">{prop.ngo_name}</p>
-                                    <p className="text-xs text-slate-500 mt-0.5">Proposed Budget: {formatINR(prop.budget)}</p>
-                                  </div>
-                                  {opp.status !== "assigned" && (
-                                    <button
-                                      onClick={() => onReviewProposal(prop, opp)}
-                                      className="inline-flex h-8 items-center gap-1 rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700 shadow-sm active:scale-95 transition shrink-0"
-                                    >
-                                      <MessageSquare className="h-3.5 w-3.5" />
-                                      Review & Calibrate
-                                    </button>
-                                  )}
-                                </div>
-                                <p className="text-xs text-slate-600 italic bg-slate-50 rounded border border-slate-100 p-2.5 leading-relaxed">
-                                  {prop.latest_update?.replace("Proposal submitted: ", "") || "No proposal summary provided."}
-                                </p>
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                            Legacy proposals ({legacyProposals.length})
+                          </p>
+                          {legacyProposals.map((prop) => (
+                            <div key={prop.id} className="rounded-lg border border-slate-200 bg-white p-3.5 flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-semibold text-slate-900">{prop.ngo_name}</p>
+                                <p className="text-xs text-slate-500">Proposed {formatINR(prop.budget)}</p>
                               </div>
-                            ))}
-                          </div>
+                              {opp.status !== "assigned" ? (
+                                <button
+                                  onClick={() => onReviewProposal(prop, opp)}
+                                  className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                                >
+                                  Legacy review
+                                </button>
+                              ) : null}
+                            </div>
+                          ))}
                         </div>
                       ) : (
                         <p className="text-xs text-slate-400 italic pt-1">
-                          {opp.status === "assigned" ? "This project has been assigned to an NGO." : "No NGO applications received for this project yet."}
+                          {opp.status === "assigned"
+                            ? "This project has been assigned to an NGO."
+                            : "No applications yet — publish the project so NGOs can apply, or ask admin to run matchmaker."}
                         </p>
                       )}
                     </div>
@@ -3633,7 +3861,7 @@ function DiscoverNgosPage({ corporateSlug }: { corporateSlug: string }) {
       <PageHero
         eyebrow="Discover NGOs"
         title="Search and vet verified NGO partners"
-        text="Browse the full NGO directory, filter by state or focus, and open a complete profile — registration, financials, project history, and trust signals — before reaching out."
+        text="Browse the directory and open full profiles. To partner on a posted CSR project, NGOs apply from their dashboard — you review in My Projects; direct assign is not available here."
       />
       <div className="flex flex-wrap items-center gap-2">
         <AiAssistBadge label="AI-ranked directory" />
@@ -3721,6 +3949,7 @@ function NgoManagementPage({
   navigateTo,
   onAssignProject,
   setActiveNgoId,
+  hasOpenMatchmaking,
 }: {
   activeNgoId: string;
   assigningNgoId: string;
@@ -3729,6 +3958,7 @@ function NgoManagementPage({
   navigateTo: (destination: Destination, focus?: { campaignId?: string; ngoId?: string }) => void;
   onAssignProject: (candidate: NgoCandidate) => void;
   setActiveNgoId: (ngoId: string) => void;
+  hasOpenMatchmaking: boolean;
 }) {
   const { data, isLoading, error } = useWorkspaceOverview();
   const [showRegister, setShowRegister] = useState(false);
@@ -3876,8 +4106,21 @@ function NgoManagementPage({
         <SectionHeading
           icon={HeartHandshake}
           title="Available NGO Partners"
-          text="Assign a CSR project to establish a new connected workspace."
+          text={
+            hasOpenMatchmaking
+              ? "You have open applicants or admin suggestions — use My Projects to shortlist and confirm before assigning ad-hoc."
+              : "Direct assign creates a legacy project connection (admin Pending Confirmations). Prefer My Projects matchmaking when a CSR opportunity is posted."
+          }
         />
+        {hasOpenMatchmaking ? (
+          <div className="mb-4 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900">
+            Matchmaking is in progress.{" "}
+            <button type="button" className="font-semibold underline" onClick={() => navigateTo("My Projects")}>
+              Go to My Projects
+            </button>{" "}
+            to shortlist NGOs and confirm partnership before activation.
+          </div>
+        ) : null}
         <div className="-mx-1 overflow-x-auto">
           <table className="w-full min-w-[600px] text-left text-sm">
             <thead className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -3898,7 +4141,8 @@ function NgoManagementPage({
                 const disabled =
                   connected ||
                   assigningNgoId === candidate.id ||
-                  candidate.status === "Suspended";
+                  candidate.status === "Suspended" ||
+                  hasOpenMatchmaking;
 
                 return (
                   <tr className="hover:bg-slate-50/50" key={candidate.id}>
@@ -3934,10 +4178,12 @@ function NgoManagementPage({
                           </>
                         ) : assigningNgoId === candidate.id ? (
                           "Assigning..."
+                        ) : hasOpenMatchmaking ? (
+                          "Use My Projects"
                         ) : (
                           <>
                             <HeartHandshake className="h-3.5 w-3.5" />
-                            Assign Project
+                            Legacy assign
                           </>
                         )}
                       </button>
@@ -6549,6 +6795,7 @@ function NgoComparisonModal({
   onClose,
   onAssign,
   onSwitchProposal,
+  onGoToMyProjects,
 }: {
   opp: CsrOpportunity;
   proposal: ProjectConnection;
@@ -6561,6 +6808,7 @@ function NgoComparisonModal({
     proposalId?: string
   ) => void;
   onSwitchProposal: (prop: ProjectConnection) => void;
+  onGoToMyProjects: () => void;
 }) {
   const [ngoProfile, setNgoProfile] = useState<NgoReviewProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
@@ -6885,15 +7133,28 @@ function NgoComparisonModal({
         </div>
 
         {/* Footer */}
-        <div className="border-t border-slate-200 px-6 py-4 bg-slate-50 flex justify-end gap-3 items-center">
-          <span className="text-xs text-slate-400 font-bold mr-auto">
-            Proposing: {formatINR(proposal.budget)}
-          </span>
+        <div className="border-t border-slate-200 px-6 py-4 bg-slate-50 flex flex-wrap justify-end gap-3 items-center">
+          <div className="mr-auto max-w-md space-y-1">
+            <span className="text-xs text-slate-500 font-medium block">
+              Proposed budget: {formatINR(proposal.budget)}
+            </span>
+            <p className="text-[11px] leading-snug text-slate-500">
+              Standard path: shortlist this NGO in <strong>My Projects</strong>, confirm partnership, NGO confirms, then admin activates the shared workspace.
+            </p>
+          </div>
           <button
             onClick={onClose}
             className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
           >
             Close Review
+          </button>
+          <button
+            type="button"
+            onClick={onGoToMyProjects}
+            className="rounded-xl bg-[#849b34] px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#71852c] transition flex items-center gap-1.5"
+          >
+            <Users className="h-4 w-4" />
+            Shortlist in My Projects
           </button>
           <button
             onClick={() => {
@@ -6905,10 +7166,10 @@ function NgoComparisonModal({
               );
               onClose();
             }}
-            className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 hover:shadow transition flex items-center gap-1.5"
+            className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition flex items-center gap-1.5"
+            title="Legacy path — submits project_connections for admin Pending Confirmations"
           >
-            <CheckCircle2 className="h-4 w-4" />
-            Approve & Assign Project
+            Legacy approve & assign
           </button>
         </div>
       </div>

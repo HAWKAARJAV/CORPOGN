@@ -602,23 +602,44 @@ function ProjectsTab() {
 
 // ─── Pending Confirmations Tab ─────────────────────────────────────────────────
 
+type PreAssignmentLedgerRow = {
+  id: string;
+  ngo_name: string;
+  corporate_name: string;
+  opportunity_title: string;
+  corporate_confirmed_at: string | null;
+  ngo_confirmed_at: string | null;
+  activated_at: string | null;
+};
+
 function PendingConfirmationsTab() {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [readyToActivate, setReadyToActivate] = useState<PreAssignmentLedgerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionError, setActionError] = useState<Record<string, string>>({});
   const [successId, setSuccessId] = useState<string | null>(null);
+  const [activateMsg, setActivateMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
       const params = new URLSearchParams({ status: "pending_admin", limit: "100" });
-      const res = await fetch(`/api/admin/projects?${params}`);
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+      const [legacyRes, preRes] = await Promise.all([
+        fetch(`/api/admin/projects?${params}`),
+        fetch("/api/admin/pre-assignments"),
+      ]);
+      const d = await legacyRes.json();
+      if (!legacyRes.ok) throw new Error(d.error || `HTTP ${legacyRes.status}`);
       setProjects(d.projects ?? []);
+
+      const pre = await preRes.json();
+      const rows = (pre.pre_assignments ?? []) as PreAssignmentLedgerRow[];
+      setReadyToActivate(
+        rows.filter((p) => p.corporate_confirmed_at && p.ngo_confirmed_at && !p.activated_at),
+      );
     } catch (e: any) {
       setError(e.message || "Failed to load pending confirmations");
     } finally {
@@ -627,6 +648,29 @@ function PendingConfirmationsTab() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const activatePreAssignment = async (id: string) => {
+    setActionLoading(`pre-${id}`);
+    setActivateMsg(null);
+    try {
+      const { data } = await supabaseBrowser.auth.getSession();
+      const res = await fetch(`/api/admin/pre-assignments/${id}/activate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${data.session?.access_token ?? ""}`,
+        },
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Activation failed");
+      setActivateMsg("Workspace activated — corporate and NGO unlock signed delivery modules.");
+      await load();
+    } catch (e: any) {
+      setActivateMsg(e.message || "Could not activate");
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   const handleDecision = async (id: string, action: "approve" | "reject") => {
     setActionLoading(`${id}-${action}`);
@@ -651,12 +695,48 @@ function PendingConfirmationsTab() {
 
   return (
     <div className="space-y-5">
+      <div className="rounded-xl border border-violet-500/25 bg-violet-500/10 px-4 py-3 text-sm text-violet-100 leading-relaxed">
+        <strong className="text-white">Two approval queues:</strong>{" "}
+        <em>Legacy connections</em> below are <code className="text-violet-200">project_connections</code> in{" "}
+        <code className="text-violet-200">pending_admin</code> (corporate used legacy assign).{" "}
+        <em>Pre-assignment activation</em> is when both corporate and NGO confirmed in Matchmaker — use Activate there or in this tab.
+      </div>
+
       <div className="flex items-center gap-3">
         <button onClick={load} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/50 hover:text-white transition-colors">
           <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
         </button>
-        <span className="text-sm text-white/30">{projects.length} awaiting approval</span>
+        <span className="text-sm text-white/30">
+          {projects.length} legacy connection{projects.length === 1 ? "" : "s"} · {readyToActivate.length} pre-assign ready to activate
+        </span>
       </div>
+
+      {activateMsg ? (
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">{activateMsg}</div>
+      ) : null}
+
+      {readyToActivate.length > 0 ? (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-white/80">Pre-assignments — both sides confirmed</h3>
+          {readyToActivate.map((p) => (
+            <div key={p.id} className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="text-sm text-white/70">
+                <span className="font-semibold text-white">{p.ngo_name}</span> ↔ {p.corporate_name} · {p.opportunity_title}
+              </div>
+              <button
+                type="button"
+                onClick={() => activatePreAssignment(p.id)}
+                disabled={actionLoading !== null}
+                className="rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-3 py-1.5 text-xs font-bold text-white"
+              >
+                {actionLoading === `pre-${p.id}` ? "Activating…" : "Activate workspace"}
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <h3 className="text-sm font-semibold text-white/80 pt-2">Legacy project connections (pending admin)</h3>
 
       {error && (
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
@@ -898,6 +978,7 @@ interface Opportunity {
 
 interface MatchResult {
   id: string;
+  claimed_ngo_id?: string | null;
   name: string;
   certification_tier: string;
   city: string;
@@ -952,6 +1033,7 @@ function MatchmakerTab() {
   const [poolInfo, setPoolInfo] = useState<{ candidatePoolSize: number; capacityGateExcludedCount: number } | null>(null);
   const [scoringRunId, setScoringRunId] = useState<string | null>(null);
   const [isSuggesting, setIsSuggesting] = useState(false);
+  const [isSendingTrustBatch, setIsSendingTrustBatch] = useState(false);
   const [suggestResult, setSuggestResult] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [overrideDraft, setOverrideDraft] = useState<{ ngoId: string; notes: string } | null>(null);
@@ -1029,12 +1111,48 @@ function MatchmakerTab() {
       const result = await res.json();
       if (res.ok) {
         const merged = result.results.filter((r: { action: string }) => r.action === "merged").length;
-        setSuggestResult(`Suggested ${result.suggested} NGO(s) to the corporate (${merged} merged with an existing application).`);
+        setSuggestResult(
+          `Suggested ${result.suggested} NGO(s) — corporate sees them under My Projects → Admin Suggested and Recommended NGOs → Matchmaker suggestions (${merged} merged with an application).`,
+        );
+        loadPre();
       } else {
         setSuggestResult(result.error ?? "Could not suggest NGOs.");
       }
     } finally {
       setIsSuggesting(false);
+    }
+  };
+
+  const handleSendTrustBatch = async () => {
+    if (!selectedOpp || !matches.length) return;
+    const ngoIds = [
+      ...new Set(
+        matches.map((m) => m.claimed_ngo_id).filter((id): id is string => Boolean(id)),
+      ),
+    ].slice(0, 10);
+    if (!ngoIds.length) {
+      setSuggestResult("No registered NGOs in the top ranks — link discovered NGOs to live accounts before sending a trust-score batch.");
+      return;
+    }
+    setIsSendingTrustBatch(true);
+    setSuggestResult(null);
+    try {
+      const headers = { "Content-Type": "application/json", ...(await authHeader()) };
+      const res = await fetch("/api/admin/recommendations", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ opportunityId: selectedOpp.id, ngoIds }),
+      });
+      const result = await res.json();
+      if (res.ok) {
+        setSuggestResult(
+          `Trust-score batch sent to corporate Recommended NGOs (${result.recommendations?.length ?? ngoIds.length} NGOs).`,
+        );
+      } else {
+        setSuggestResult(result.error ?? "Could not send recommendation batch.");
+      }
+    } finally {
+      setIsSendingTrustBatch(false);
     }
   };
 
@@ -1246,13 +1364,22 @@ function MatchmakerTab() {
                     </span>
                   ) : null}
                   {matches.length && scoringRunId ? (
-                    <button
-                      onClick={handleSuggest}
-                      disabled={isSuggesting}
-                      className="rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-50 px-3 py-1.5 text-xs font-bold text-white transition-colors"
-                    >
-                      {isSuggesting ? "Suggesting..." : "Suggest Top 10 to Corporate"}
-                    </button>
+                    <>
+                      <button
+                        onClick={handleSuggest}
+                        disabled={isSuggesting}
+                        className="rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-50 px-3 py-1.5 text-xs font-bold text-white transition-colors"
+                      >
+                        {isSuggesting ? "Suggesting..." : "Suggest Top 10 (pre-assign)"}
+                      </button>
+                      <button
+                        onClick={handleSendTrustBatch}
+                        disabled={isSendingTrustBatch}
+                        className="rounded-lg border border-violet-400/40 hover:bg-violet-500/20 disabled:opacity-50 px-3 py-1.5 text-xs font-bold text-violet-200 transition-colors"
+                      >
+                        {isSendingTrustBatch ? "Sending…" : "Send trust-score batch"}
+                      </button>
+                    </>
                   ) : null}
                 </div>
               </div>

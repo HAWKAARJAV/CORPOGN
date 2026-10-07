@@ -14,6 +14,35 @@ async function requireAdmin(request: Request) {
   return { user, context } as const;
 }
 
+function schemaMissing(error?: { message?: string } | null) {
+  return Boolean(error?.message?.includes("schema cache") || error?.message?.includes("does not exist"));
+}
+
+export async function GET(request: Request) {
+  const auth = await requireAdmin(request);
+  if ("error" in auth) return Response.json({ error: auth.error }, { status: auth.status });
+
+  const { data: batches, error: batchError } = await supabaseAdmin
+    .from("project_recommendation_batches")
+    .select("*, opportunities(id, title), corporates(id, company_name)")
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (schemaMissing(batchError)) return Response.json({ batches: [], recommendations: [] });
+  if (batchError) return Response.json({ error: batchError.message }, { status: 500 });
+
+  const { data: recommendations, error: recError } = await supabaseAdmin
+    .from("project_recommendations")
+    .select("*, ngos(id, ngo_name), opportunities(id, title)")
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  if (schemaMissing(recError)) return Response.json({ batches: batches ?? [], recommendations: [] });
+  if (recError) return Response.json({ error: recError.message }, { status: 500 });
+
+  return Response.json({ batches: batches ?? [], recommendations: recommendations ?? [] });
+}
+
 export async function POST(request: Request) {
   const auth = await requireAdmin(request);
   if ("error" in auth) return Response.json({ error: auth.error }, { status: auth.status });

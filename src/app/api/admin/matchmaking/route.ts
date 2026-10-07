@@ -92,6 +92,7 @@ export async function GET(req: Request) {
 
     const matches = ranked.map((s) => ({
       id: s.ngo.id,
+      claimed_ngo_id: s.ngo.claimed_ngo_id ?? null,
       name: s.ngo.name,
       certification_tier: s.ngo.certification_tier,
       city: s.ngo.city,
