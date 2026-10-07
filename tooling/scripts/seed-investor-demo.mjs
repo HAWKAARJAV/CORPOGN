@@ -32,6 +32,9 @@ const DEMO = {
   projectTitle: "Digital Education & Equal Opportunity Initiative",
   opportunityId: "a9f8e7d6-c5b4-4321-9876-543210fedcba",
   preAssignmentId: "b8e7d6c5-a4b3-4210-8765-432109fedcba",
+  pipelineOpportunityId: "c1d2e3f4-a5b6-4789-abcd-ef0123456789",
+  pipelinePreAssignmentId: "d2e3f4a5-b6c3-4789-abcd-ef0123456789",
+  pipelineProjectTitle: "Senior Care & Dignified Ageing Centres",
   projectBudgetInr: 5_000_000,
   releasedInr: 3_000_000,
   utilizedInr: 2_140_000,
@@ -104,6 +107,122 @@ async function ensureAuthUser(admin, email, password, metadata) {
   });
   if (error) throw new Error(`createUser(${email}): ${error.message}`);
   return data.user.id;
+}
+
+async function seedPipelineOpportunity(admin, corporateId, ngoId) {
+  const oppPayload = {
+    id: DEMO.pipelineOpportunityId,
+    corporate_id: corporateId,
+    title: DEMO.pipelineProjectTitle,
+    description:
+      "CSR partnership to upgrade two residential care centres with medical outreach, nutrition, and digital health records for 120 elderly residents in Bengaluru.",
+    focus_area: "Healthcare",
+    csr_focus_area: "Senior care",
+    budget: 3_500_000,
+    state: "Karnataka",
+    district: "Bengaluru Urban",
+    lifecycle_status: "published",
+    status: "open",
+    published_at: daysAgoIso(12),
+    target_beneficiaries: ["Elderly residents", "Caregivers"],
+    sdg_targets: ["SDG 3", "SDG 10"],
+    duration_months: 24,
+    min_trust_score: 70,
+  };
+
+  const { error: oppErr } = await admin.from("opportunities").upsert(oppPayload, { onConflict: "id" });
+  if (oppErr) console.warn(`pipeline opportunity: ${oppErr.message}`);
+
+  const paPayload = {
+    id: DEMO.pipelinePreAssignmentId,
+    opportunity_id: DEMO.pipelineOpportunityId,
+    ngo_id: ngoId,
+    match_score: 87,
+    status: "shortlisted",
+    source: ["ngo_applied"],
+    application_data: {
+      summary: "SEE Foundation proposes phased centre upgrades with nurse-led outreach and M&E on resident wellbeing indices.",
+      proposed_budget: 3_200_000,
+    },
+    corporate_confirmed_at: null,
+    ngo_confirmed_at: null,
+    activated_at: null,
+  };
+  const { error: paErr } = await admin.from("pre_assignments").upsert(paPayload, { onConflict: "id" });
+  if (paErr) console.warn(`pipeline pre_assignment: ${paErr.message}`);
+}
+
+function daysAgoIso(n) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString();
+}
+
+async function seedDemoNotifications(admin, recipients) {
+  const userIds = recipients.map((r) => r.userId).filter(Boolean);
+  if (!userIds.length) return;
+
+  await admin.from("notifications").delete().in("user_id", userIds);
+
+  const rows = [];
+  for (const { userId, email } of recipients) {
+    if (!userId) continue;
+    if (email === DEMO.corporateEmail) {
+      rows.push(
+        {
+          user_id: userId,
+          title: "Fund release pending approval",
+          message: "Q4 expansion tranche (₹4L) awaits finance sign-off on Digital Education & Equal Opportunity Initiative.",
+          notification_type: "FUND_APPROVAL",
+          entity_type: "project",
+          entity_id: DEMO.opportunityId,
+        },
+        {
+          user_id: userId,
+          title: "Partnership confirmation needed",
+          message: `${DEMO.pipelineProjectTitle}: SEE Foundation is shortlisted — confirm to proceed to dual confirmation.`,
+          notification_type: "PARTNERSHIP_CONFIRM",
+          entity_type: "pre_assignment",
+          entity_id: DEMO.pipelinePreAssignmentId,
+        },
+      );
+    }
+    if (email === DEMO.ngoEmail) {
+      rows.push(
+        {
+          user_id: userId,
+          title: "Milestone update recorded",
+          message: "Digital learning rollout is in progress (60% complete). Corporate steering committee in 5 days.",
+          notification_type: "MILESTONE_UPDATE",
+          entity_type: "project",
+          entity_id: DEMO.opportunityId,
+        },
+        {
+          user_id: userId,
+          title: "Impact report review",
+          message: "Midline M&E submission is pending corporate approval.",
+          notification_type: "REPORT_REVIEW",
+          entity_type: "project",
+          entity_id: DEMO.opportunityId,
+        },
+      );
+    }
+    if (email === DEMO.platformAdminEmail) {
+      rows.push({
+        user_id: userId,
+        title: "Demo network ready",
+        message: "Sorting Tax ↔ SEE flagship workspace seeded; Senior Care pipeline awaiting corporate confirm.",
+        notification_type: "ADMIN_DEMO",
+        entity_type: "platform",
+        entity_id: null,
+      });
+    }
+  }
+
+  if (rows.length) {
+    const { error } = await admin.from("notifications").insert(rows);
+    if (error) console.warn(`notifications: ${error.message}`);
+  }
 }
 
 async function clearWorkspaceModules(admin, projectId) {
@@ -543,12 +662,6 @@ async function main() {
     );
   }
 
-  function daysAgoIso(n) {
-    const d = new Date();
-    d.setDate(d.getDate() - n);
-    return d.toISOString();
-  }
-
   const oppPayload = {
     id: DEMO.opportunityId,
     corporate_id: corporateId,
@@ -632,6 +745,14 @@ async function main() {
     console.log("Workspace module data already present (use --reset-workspace to replace).");
   }
 
+  console.log("Seeding pipeline opportunity (Senior Care) + notifications…");
+  await seedPipelineOpportunity(admin, corporateId, ngoId);
+  await seedDemoNotifications(admin, [
+    { userId: corpUserId, email: DEMO.corporateEmail },
+    { userId: ngoUserId, email: DEMO.ngoEmail },
+    { userId: platformAdminUserId, email: DEMO.platformAdminEmail },
+  ]);
+
   console.log(`
 ✅ Investor demo seeded
 
@@ -649,6 +770,8 @@ Platform  : CorpoGN operator console
 
 Project   : ${DEMO.projectTitle}
   Budget ₹${(DEMO.projectBudgetInr / 100000).toFixed(2)}L | Released ₹${(DEMO.releasedInr / 100000).toFixed(2)}L | Utilized ₹${(DEMO.utilizedInr / 100000).toFixed(2)}L
+
+Pipeline  : ${DEMO.pipelineProjectTitle} (published — SEE shortlisted, awaiting corporate confirm)
 
 Login password (set DEMO_SEED_PASSWORD to override):
   ${password}

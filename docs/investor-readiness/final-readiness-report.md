@@ -163,6 +163,8 @@ Non-destructive: preserve Next.js + Supabase + 49 APIs + 14-module workspace. Im
 | NGO role home queues | `NgoRoleWorkQueue` on each role’s default sidebar section — live counts from `/api/project-workspace/:id/:module` |
 | Campaign vs project copy | Dashboard portfolio table uses “Project”; Campaign Management remains the per-program workspace UI |
 | Empty NGO/corporate states | No fake NGO directory or fund tranches; run `npm run seed:demo` before investor walkthrough |
+| NGO Command Center KPIs | `/api/ngo/workspace-summary` — team count, M&E beneficiaries, activity_logs (2026-10-07) |
+| Pipeline demo row | Seed adds **Senior Care** published opportunity + shortlisted SEE application for confirm/activate narrative |
 
 ### Security / RLS
 

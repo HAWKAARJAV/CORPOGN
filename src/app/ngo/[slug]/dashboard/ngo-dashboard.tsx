@@ -349,11 +349,12 @@ const DOC_TYPES = [
 ];
 
 function UploadModal({
-  open, defaultDocType, onClose, onSuccess, ngoId,
+  open, defaultDocType, onClose, onSuccess, ngoId, token,
 }: {
   open: boolean; defaultDocType?: string;
   onClose: () => void; onSuccess: (docId: string, docLabel: string, storagePath?: string) => void;
   ngoId: string;
+  token: string;
 }) {
   const [docType, setDocType] = useState(defaultDocType ?? "");
   const [file, setFile] = useState<File | null>(null);
@@ -369,35 +370,26 @@ function UploadModal({
     if (!file) { setError("Please choose a file."); return; }
     setUploading(true);
     try {
-      // 1. Upload file to Supabase Storage via signed upload or direct client upload
-      const ext = file.name.split(".").pop() ?? "pdf";
-      const storagePath = `compliance/${Date.now()}-${docType}.${ext}`;
-      const { error: storageError } = await supabaseBrowser.storage
-        .from("ngo-documents")
-        .upload(storagePath, file, { upsert: true, contentType: file.type });
-
-      if (storageError) {
-        // Bucket may not exist yet — still mark locally so UI reflects upload
-        console.warn("[Compliance] Storage upload failed (bucket may not exist):", storageError.message);
+      if (!token) {
+        setError("Your session has expired. Please sign in again.");
+        return;
       }
-
-      // 2. Upsert document metadata into the database
-      const { error: dbError } = await supabaseBrowser
-        .from("ngo_documents")
-        .upsert({
-          ngo_id: ngoId,
-          doc_type: docType,
-          storage_path: storagePath,
-          status: "uploaded",
-          uploaded_at: new Date().toISOString()
-        }, { onConflict: "ngo_id,doc_type" });
-
-      if (dbError) {
-        console.warn("[Compliance] Database metadata save failed:", dbError.message);
+      const form = new FormData();
+      form.append("doc_type", docType);
+      form.append("file", file);
+      const res = await fetch("/api/ngos/documents", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      const body = (await res.json()) as { error?: string; storagePath?: string };
+      if (!res.ok) {
+        setError(body.error ?? "Upload failed.");
+        return;
       }
 
       const label = DOC_TYPES.find((d) => d.id === docType)?.label ?? docType;
-      onSuccess(docType, label, storagePath);
+      onSuccess(docType, label, body.storagePath);
       setFile(null);
       setDocType("");
       fileRef.current && (fileRef.current.value = "");
@@ -464,13 +456,42 @@ function UploadModal({
 
 // ─── Section: Command Center ──────────────────────────────────────────────────
 
+type NgoWorkspaceSummary = {
+  hasSignedWorkspace: boolean;
+  projectTitle: string | null;
+  teamMemberCount: number;
+  beneficiariesReached: number;
+  beneficiariesTarget: number;
+  releasedInr: number;
+  spentInr: number;
+  pendingApprovals: number;
+  recentActivity: { id: string; module: string; action: string; detail: Record<string, unknown>; createdAt: string | null }[];
+};
+
 function CommandCenterSection({
-  ngo, onNavigate, uploadedCount, liveTrustScore, docs,
+  ngo, onNavigate, uploadedCount, liveTrustScore, docs, accessToken,
 }: {
   ngo: Ngo; onNavigate: (id: string) => void;
   uploadedCount: number; liveTrustScore: number;
   docs: Record<string, string>;
+  accessToken: string;
 }) {
+  const [workspaceSummary, setWorkspaceSummary] = useState<NgoWorkspaceSummary | null>(null);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    let cancelled = false;
+    fetch("/api/ngo/workspace-summary", { headers: { Authorization: `Bearer ${accessToken}` } })
+      .then((r) => r.json())
+      .then((body: NgoWorkspaceSummary) => {
+        if (!cancelled && body && typeof body.teamMemberCount === "number") {
+          setWorkspaceSummary(body);
+        }
+      })
+      .catch(() => { });
+    return () => { cancelled = true; };
+  }, [accessToken]);
+
   const isVerified = ngo.access_status === "verified" || ngo.access_status === "active";
   return (
     <div className="space-y-6">
@@ -512,12 +533,38 @@ function CommandCenterSection({
       )}
 
       {/* KPIs */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <KpiCard label="Trust Score" value={`${liveTrustScore}/100`} icon={Star} color="amber"
           sub={liveTrustScore >= 70 ? "High trust" : liveTrustScore >= 40 ? "Medium trust" : "Upload docs"} />
-        <KpiCard label="Active Projects" value={ngo.has_project ? "1" : "0"} icon={Target} color="emerald" />
+        <KpiCard
+          label="Active Projects"
+          value={workspaceSummary?.hasSignedWorkspace ? "1" : ngo.has_project ? "1" : "0"}
+          icon={Target}
+          color="emerald"
+        />
         <KpiCard label="Docs Uploaded" value={`${uploadedCount} / 24`} icon={ShieldCheck} color="blue" sub="Upload to boost score" />
-        <KpiCard label="Team Members" value="0" icon={Users} color="violet" sub="Manage via Team Management" />
+        <KpiCard
+          label="Team Members"
+          value={String(workspaceSummary?.teamMemberCount ?? 0)}
+          icon={Users}
+          color="violet"
+          sub="Manage via Team Management"
+        />
+        {workspaceSummary?.hasSignedWorkspace ? (
+          <KpiCard
+            label="Beneficiaries reached"
+            value={
+              workspaceSummary.beneficiariesTarget > 0
+                ? `${workspaceSummary.beneficiariesReached} / ${workspaceSummary.beneficiariesTarget}`
+                : String(workspaceSummary.beneficiariesReached)
+            }
+            icon={Heart}
+            color="rose"
+            sub={`₹${(workspaceSummary.releasedInr / 100_000).toFixed(1)}L released · ${workspaceSummary.pendingApprovals} pending approvals`}
+          />
+        ) : (
+          <KpiCard label="Open opportunities" value="Browse" icon={Heart} color="rose" sub="Apply from Opportunities" />
+        )}
       </div>
 
       {/* Trust score + org health visual */}
@@ -581,10 +628,21 @@ function CommandCenterSection({
           <div className="px-5 pt-4 pb-3 border-b border-slate-100">
             <p className="text-sm font-bold text-slate-700">Recent Team Activity</p>
           </div>
-          <div className="px-5 py-10 flex flex-col items-center justify-center text-center gap-2">
-            <ClipboardList className="h-8 w-8 text-slate-200" />
-            <p className="text-sm font-medium text-slate-400">Activity will appear here once your team logs actions on the project.</p>
-          </div>
+          {(workspaceSummary?.recentActivity?.length ?? 0) === 0 ? (
+            <div className="px-5 py-10 flex flex-col items-center justify-center text-center gap-2">
+              <ClipboardList className="h-8 w-8 text-slate-200" />
+              <p className="text-sm font-medium text-slate-400">Activity will appear here once your team logs actions on the project.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {(workspaceSummary?.recentActivity ?? []).map((log) => (
+                <div key={log.id} className="px-5 py-3.5">
+                  <p className="text-sm font-semibold text-slate-800 capitalize">{log.action.replace(/_/g, " ")}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{log.module}{log.createdAt ? ` · ${new Date(log.createdAt).toLocaleDateString("en-IN")}` : ""}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -1193,15 +1251,15 @@ function ComplianceVaultSection({
     }
     setViewing(true);
     try {
-      const { data, error } = await supabaseBrowser.storage
-        .from("ngo-documents")
-        .createSignedUrl(path, 60);
-
-      if (error || !data?.signedUrl) {
-        throw new Error(error?.message || "Failed to generate preview URL.");
+      const res = await fetch(`/api/ngos/documents?path=${encodeURIComponent(path)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const body = (await res.json()) as { signedUrl?: string; error?: string };
+      if (!res.ok || !body.signedUrl) {
+        throw new Error(body.error || "Failed to generate preview URL.");
       }
 
-      window.open(data.signedUrl, "_blank");
+      window.open(body.signedUrl, "_blank");
     } catch (err) {
       setToast(err instanceof Error ? `❌ ${err.message}` : "❌ Could not open document.");
       setTimeout(() => setToast(""), 4000);
@@ -1335,6 +1393,7 @@ function ComplianceVaultSection({
         onClose={() => setUploadOpen(false)}
         onSuccess={handleSuccess}
         ngoId={ngoId}
+        token={token}
       />
     </div>
   );
@@ -2802,6 +2861,9 @@ function RoleModuleSection({
   const [error, setError] = useState<string | null>(null);
   const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [patchingId, setPatchingId] = useState<string | null>(null);
+  const [docUploading, setDocUploading] = useState(false);
+  const docFileRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     if (!projectId || !token) return;
@@ -2848,9 +2910,45 @@ function RoleModuleSection({
     setIsSubmitting(false);
   }
 
+  async function patchRow(id: string, patch: Record<string, unknown>) {
+    if (!projectId) return;
+    setPatchingId(id);
+    setError(null);
+    const res = await fetch(`/api/project-workspace/${projectId}/${module}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ id, ...patch }),
+    });
+    const body = await res.json();
+    if (res.ok) await load();
+    else setError(body.error ?? "Could not update this entry.");
+    setPatchingId(null);
+  }
+
+  async function handleWorkspaceDocumentUpload(file: File) {
+    if (!projectId) return;
+    setDocUploading(true);
+    setError(null);
+    const form = new FormData();
+    form.append("file", file);
+    form.append("doc_type", "field_media");
+    const res = await fetch(`/api/project-workspace/${projectId}/upload`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    const body = await res.json();
+    if (res.ok) await load();
+    else setError(body.error ?? "Could not upload file.");
+    setDocUploading(false);
+  }
+
   const visibleItems = filterByAssignee
     ? items.filter((it) => it.assigned_to == null || it.assigned_to === filterByAssignee)
     : items;
+
+  const showMetricEditor = module === "monitoring_evaluation";
+  const showBudgetEditor = module === "budget_tracking";
 
   return (
     <div className="space-y-6">
@@ -2870,11 +2968,106 @@ function RoleModuleSection({
         </div>
       ) : (
         <>
-          <DataTable
-            headers={config.fields.map((f) => f.label)}
-            emptyMsg={isLoading ? "Loading..." : "No entries yet."}
-            rows={visibleItems.map((item) => config.fields.map((f) => (item[f.name] != null ? String(item[f.name]) : "—")))}
-          />
+          {showMetricEditor || showBudgetEditor ? (
+            <div className={`${cardCls} p-4 space-y-3`}>
+              {visibleItems.length === 0 ? (
+                <p className="text-sm text-slate-400">{isLoading ? "Loading..." : "No entries yet."}</p>
+              ) : (
+                visibleItems.map((item) => (
+                  <div key={String(item.id)} className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white p-3">
+                    <div className="min-w-[140px] flex-1 text-sm">
+                      <p className="text-xs text-slate-400">{showMetricEditor ? "Metric" : "Line item"}</p>
+                      <p className="font-semibold text-slate-800">
+                        {String(showMetricEditor ? item.metric_name : item.line_item ?? "—")}
+                      </p>
+                    </div>
+                    {showMetricEditor ? (
+                      <label className="text-xs text-slate-500">
+                        Value
+                        <input
+                          type="number"
+                          defaultValue={Number(item.metric_value ?? 0)}
+                          key={`${item.id}-${item.metric_value}`}
+                          className={`${inputCls} mt-1 w-32`}
+                          onBlur={(e) => {
+                            const next = Number(e.target.value);
+                            if (Number(item.metric_value) !== next) {
+                              void patchRow(String(item.id), { metric_value: next });
+                            }
+                          }}
+                        />
+                      </label>
+                    ) : (
+                      <>
+                        <label className="text-xs text-slate-500">
+                          Budgeted (₹)
+                          <input
+                            type="number"
+                            defaultValue={Number(item.budgeted_inr ?? 0)}
+                            key={`${item.id}-b-${item.budgeted_inr}`}
+                            className={`${inputCls} mt-1 w-32`}
+                            onBlur={(e) => {
+                              const next = Number(e.target.value);
+                              if (Number(item.budgeted_inr) !== next) {
+                                void patchRow(String(item.id), { budgeted_inr: next });
+                              }
+                            }}
+                          />
+                        </label>
+                        <label className="text-xs text-slate-500">
+                          Spent (₹)
+                          <input
+                            type="number"
+                            defaultValue={Number(item.spent_inr ?? 0)}
+                            key={`${item.id}-s-${item.spent_inr}`}
+                            className={`${inputCls} mt-1 w-32`}
+                            onBlur={(e) => {
+                              const next = Number(e.target.value);
+                              if (Number(item.spent_inr) !== next) {
+                                void patchRow(String(item.id), { spent_inr: next });
+                              }
+                            }}
+                          />
+                        </label>
+                      </>
+                    )}
+                    {patchingId === String(item.id) ? (
+                      <span className="text-xs text-slate-400">Saving…</span>
+                    ) : null}
+                  </div>
+                ))
+              )}
+            </div>
+          ) : (
+            <DataTable
+              headers={config.fields.map((f) => f.label)}
+              emptyMsg={isLoading ? "Loading..." : "No entries yet."}
+              rows={visibleItems.map((item) => config.fields.map((f) => (item[f.name] != null ? String(item[f.name]) : "—")))}
+            />
+          )}
+          {permission === "edit" && module === "documents" && (
+            <div className={`${cardCls} p-5`}>
+              <p className="mb-3 text-sm font-bold text-slate-700">Upload file</p>
+              <input
+                ref={docFileRef}
+                type="file"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleWorkspaceDocumentUpload(f);
+                  e.target.value = "";
+                }}
+              />
+              <button
+                type="button"
+                disabled={docUploading}
+                onClick={() => docFileRef.current?.click()}
+                className={`${btn} justify-center`}
+              >
+                {docUploading ? "Uploading…" : "Choose file to upload"}
+              </button>
+            </div>
+          )}
           {permission === "edit" && (
             <div className={`${cardCls} p-5`}>
               <p className="mb-3 text-sm font-bold text-slate-700">Add entry</p>
@@ -4102,21 +4295,30 @@ function ImpactReportingSection({
   }
 
   async function handleUpload(type: "photo" | "video" | "pdf", file: File) {
-    if (!connection) { showToast("No project connection — assign a project first.", "error"); return; }
+    if (!projectId) {
+      showToast("Evidence upload requires a signed project workspace.", "error");
+      return;
+    }
+    if (!token) {
+      showToast("Your session has expired. Please sign in again.", "error");
+      return;
+    }
     setUploading(type);
     try {
-      const ext = file.name.split(".").pop() ?? "bin";
-      const path = `evidence/${connection.id}/${type}-${Date.now()}.${ext}`;
-      const { error: storageErr } = await supabaseBrowser.storage
-        .from("ngo-documents")
-        .upload(path, file, { upsert: true, contentType: file.type });
-
-      if (storageErr) {
-        console.warn("[Evidence] Storage error:", storageErr.message);
-        showToast(`${file.name} recorded (storage bucket not yet created — set up 'ngo-documents' bucket in Supabase).`, "success");
-      } else {
-        showToast(`✓ ${file.name} uploaded successfully.`);
+      const form = new FormData();
+      form.append("file", file);
+      form.append("doc_type", `evidence_${type}`);
+      const res = await fetch(`/api/project-workspace/${projectId}/upload`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      const body = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        showToast(body.error ?? "Upload failed.", "error");
+        return;
       }
+      showToast(`✓ ${file.name} uploaded successfully.`);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Upload failed.", "error");
     } finally {
@@ -4247,17 +4449,29 @@ function UtilizationCertSection({
       let fileSize: number | undefined;
 
       if (file) {
-        const storagePath = `uc/${connection.id}/${Date.now()}-${file.name}`;
-        const { error: storageErr } = await supabaseBrowser.storage
-          .from("ngo-documents")
-          .upload(storagePath, file, { upsert: true, contentType: file.type });
-        if (!storageErr) {
-          storageObjectId = storagePath;
-          fileName = file.name;
-          mimeType = file.type;
-          fileSize = file.size;
-        } else {
-          console.warn("[UC] Storage upload failed:", storageErr.message);
+        const ucForm = new FormData();
+        ucForm.append("file", file);
+        const up = await fetch(`/api/project-connections/${connection.id}/uc-upload`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: ucForm,
+        });
+        const upBody = (await up.json()) as {
+          storageObjectId?: string;
+          bucketName?: string;
+          fileName?: string;
+          mimeType?: string;
+          fileSize?: number;
+          error?: string;
+        };
+        if (up.ok && upBody.storageObjectId) {
+          storageObjectId = upBody.storageObjectId;
+          fileName = upBody.fileName;
+          mimeType = upBody.mimeType;
+          fileSize = upBody.fileSize;
+        } else if (!up.ok) {
+          setSubmitError(upBody.error ?? "Could not upload certificate file.");
+          return;
         }
       }
 
@@ -5614,7 +5828,7 @@ export default function NgoDashboard({
       case "opportunities": return <OpportunitiesSection token={token} onNavigate={navigate} />;
       case "corporate-funders": return <CorporateFundersSection token={token} onNavigate={navigate} />;
       case "proposals": return <ProposalsSection token={token} onNavigate={navigate} />;
-      case "command-center": return <CommandCenterSection ngo={liveNgo} onNavigate={navigate} uploadedCount={uploadedCount} liveTrustScore={liveTrustScore} docs={sharedState.docs} />;
+      case "command-center": return <CommandCenterSection ngo={liveNgo} onNavigate={navigate} uploadedCount={uploadedCount} liveTrustScore={liveTrustScore} docs={sharedState.docs} accessToken={token} />;
       case "ngo-profile": return <NgoProfileSection ngo={liveNgo} onNavigate={navigate} token={token} onNgoUpdate={(u) => setLiveNgo((p) => ({ ...p, ...u }))} />;
       case "compliance-vault": return (
         <ComplianceVaultSection
